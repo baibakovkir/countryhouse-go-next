@@ -1,0 +1,5 @@
+DROP TABLE IF EXISTS timeline_tasks;
+DROP TABLE IF EXISTS expenses;
+DROP TABLE IF EXISTS plot_objects;
+DROP TABLE IF EXISTS plots;
+
