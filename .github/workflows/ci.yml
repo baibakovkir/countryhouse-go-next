@@ -32,10 +32,10 @@ jobs:
         with:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
-      - name: Validate migration
+      - name: Validate migrations
         env:
           PGPASSWORD: countryhouse_test
-        run: psql -h localhost -U countryhouse -d countryhouse_test -v ON_ERROR_STOP=1 -f migrations/000001_init.up.sql
+        run: for migration in migrations/*.up.sql; do psql -h localhost -U countryhouse -d countryhouse_test -v ON_ERROR_STOP=1 -f "$migration"; done
       - uses: golangci/golangci-lint-action@v6
         with:
           version: v2.4.0

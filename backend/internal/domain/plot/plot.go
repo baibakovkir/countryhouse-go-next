@@ -19,10 +19,13 @@ const (
 
 type Plot struct {
 	ID        string    `json:"id"`
+	OwnerID   string    `json:"-"`
+	Name      string    `json:"name"`
 	Width     float64   `json:"width"`
 	Length    float64   `json:"length"`
 	Objects   []Object  `json:"objects"`
 	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 type Object struct {
@@ -37,13 +40,27 @@ type Object struct {
 	Length    float64    `json:"length"`
 	Height    float64    `json:"height"`
 	CreatedAt time.Time  `json:"createdAt"`
+	UpdatedAt time.Time  `json:"updatedAt"`
 }
 
 type Repository interface {
-	Create(context.Context, float64, float64) (Plot, error)
-	GetCurrent(context.Context) (Plot, error)
-	AddObject(context.Context, Object) (Object, error)
-	ObjectExists(context.Context, string, string) (bool, error)
+	Create(context.Context, Plot) (Plot, error)
+	List(context.Context, string) ([]Plot, error)
+	Get(context.Context, string, string) (Plot, error)
+	Update(context.Context, Plot) (Plot, error)
+	Delete(context.Context, string, string) error
+	AddObject(context.Context, string, Object) (Object, error)
+	ListObjects(context.Context, string, string) ([]Object, error)
+	GetObject(context.Context, string, string, string) (Object, error)
+	UpdateObject(context.Context, string, Object) (Object, error)
+	DeleteObject(context.Context, string, string, string) error
+}
+
+func ValidateName(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return domainerr.Field("name", "is required")
+	}
+	return nil
 }
 
 func ValidateDimensions(width, length float64) error {

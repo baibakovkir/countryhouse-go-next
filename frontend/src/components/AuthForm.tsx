@@ -1,0 +1,16 @@
+"use client";
+import Link from "next/link";
+import { type FormEvent, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { FieldError } from "@/components/FieldError";
+import { errorDetails } from "@/lib/api";
+import { collect, email, password, type FieldErrors } from "@/lib/validation";
+import { useAuthStore } from "@/stores/auth-store";
+
+export function AuthForm({ mode }: { mode: "login" | "register" }) {
+  const router = useRouter(); const { status, login, register, loading, error: apiError } = useAuthStore(); const [errors, setErrors] = useState<FieldErrors>({});
+  useEffect(() => { if (status === "authenticated") router.replace("/plots"); }, [status, router]);
+  function validate(form: HTMLFormElement) { const data = new FormData(form); const pass = String(data.get("password")); const next = collect([["email", email(String(data.get("email")))], ["password", mode === "register" ? password(pass) : pass ? undefined : "Введите пароль"], ["confirmation", mode === "register" && String(data.get("confirmation")) !== pass ? "Пароли не совпадают" : undefined]]); setErrors(next); return Object.keys(next).length === 0; }
+  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (!validate(event.currentTarget)) { event.currentTarget.querySelector<HTMLElement>("[aria-invalid='true']")?.focus(); return; } const data = new FormData(event.currentTarget); const input = { email: String(data.get("email")).trim().toLowerCase(), password: String(data.get("password")) }; await (mode === "login" ? login(input) : register(input)).then(() => router.replace("/plots")).catch((error) => setErrors(errorDetails(error))); }
+  return <form noValidate onSubmit={submit} className="panel w-full max-w-md space-y-4"><h1 className="text-2xl font-bold">{mode === "login" ? "Вход" : "Регистрация"}</h1>{apiError && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{apiError}</p>}<label className="field">Email<input className="input" name="email" type="email" autoComplete="email" aria-invalid={Boolean(errors.email)} onBlur={(e) => setErrors((old) => ({ ...old, email: email(e.target.value) ?? "" }))}/><FieldError message={errors.email}/></label><label className="field">Пароль<input className="input" name="password" type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} aria-invalid={Boolean(errors.password)} onBlur={(e) => setErrors((old) => ({ ...old, password: mode === "register" ? password(e.target.value) ?? "" : e.target.value ? "" : "Введите пароль" }))}/><FieldError message={errors.password}/></label>{mode === "register" && <label className="field">Повторите пароль<input className="input" name="confirmation" type="password" autoComplete="new-password" aria-invalid={Boolean(errors.confirmation)}/><FieldError message={errors.confirmation}/></label>}<button className="button w-full" disabled={loading}>{mode === "login" ? "Войти" : "Создать аккаунт"}</button><p className="text-sm text-slate-600">{mode === "login" ? <>Нет аккаунта? <Link className="text-emerald-700 underline" href="/register">Зарегистрироваться</Link></> : <>Уже есть аккаунт? <Link className="text-emerald-700 underline" href="/login">Войти</Link></>}</p></form>;
+}

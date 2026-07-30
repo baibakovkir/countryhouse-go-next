@@ -21,11 +21,15 @@ type Task struct {
 	Currency      string        `json:"currency"`
 	Description   string        `json:"description"`
 	CreatedAt     time.Time     `json:"createdAt"`
+	UpdatedAt     time.Time     `json:"updatedAt"`
 }
 
 type Repository interface {
-	Create(context.Context, Task) (Task, error)
-	List(context.Context, string) ([]Task, error)
+	Create(context.Context, string, Task) (Task, error)
+	List(context.Context, string, string) ([]Task, error)
+	Get(context.Context, string, string, string) (Task, error)
+	Update(context.Context, string, Task) (Task, error)
+	Delete(context.Context, string, string, string) error
 }
 
 func Validate(t Task) error {

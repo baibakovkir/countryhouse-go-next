@@ -22,11 +22,15 @@ type Expense struct {
 	Date         time.Time    `json:"-"`
 	Description  string       `json:"description"`
 	CreatedAt    time.Time    `json:"createdAt"`
+	UpdatedAt    time.Time    `json:"updatedAt"`
 }
 
 type Repository interface {
-	Create(context.Context, Expense) (Expense, error)
-	List(context.Context, string) ([]Expense, error)
+	Create(context.Context, string, Expense) (Expense, error)
+	List(context.Context, string, string) ([]Expense, error)
+	Get(context.Context, string, string, string) (Expense, error)
+	Update(context.Context, string, Expense) (Expense, error)
+	Delete(context.Context, string, string, string) error
 }
 
 func Validate(e Expense) error {

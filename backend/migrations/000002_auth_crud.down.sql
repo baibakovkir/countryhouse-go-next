@@ -1,0 +1,8 @@
+ALTER TABLE timeline_tasks DROP COLUMN IF EXISTS updated_at;
+ALTER TABLE expenses DROP COLUMN IF EXISTS updated_at;
+ALTER TABLE plots DROP CONSTRAINT IF EXISTS plots_name_not_blank;
+DROP INDEX IF EXISTS plots_owner_idx;
+ALTER TABLE plots DROP COLUMN IF EXISTS name;
+ALTER TABLE plots DROP COLUMN IF EXISTS owner_id;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS users;

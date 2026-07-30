@@ -5,10 +5,11 @@ import "fmt"
 type Kind string
 
 const (
-	Validation Kind = "validation_error"
-	NotFound   Kind = "not_found"
-	Conflict   Kind = "conflict"
-	Internal   Kind = "internal_error"
+	Validation   Kind = "validation_error"
+	NotFound     Kind = "not_found"
+	Conflict     Kind = "conflict"
+	Unauthorized Kind = "unauthorized"
+	Internal     Kind = "internal_error"
 )
 
 type Error struct {

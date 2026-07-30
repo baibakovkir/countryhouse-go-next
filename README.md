@@ -1,6 +1,6 @@
 # Планировщик участка — MVP
 
-Монорепозиторий содержит Go REST API, Next.js-приложение и PostgreSQL. MVP позволяет создать один участок, разместить на нём объекты, учитывать расходы и вести список работ.
+Монорепозиторий содержит Go REST API, Next.js-приложение и PostgreSQL. Пользователь может зарегистрироваться, вести несколько участков, размещать на них объекты, учитывать расходы и планировать работы.
 
 ## Запуск через Docker
 
@@ -62,7 +62,9 @@ printf '%s\n' 'IMAGE_TAG=sha-<existing-commit-sha>' > .release.env
 chmod 600 .release.env
 ```
 
-В `.env` укажите lowercase-владельца GitHub, публичный IP и один длинный буквенно-цифровой пароль одновременно в `POSTGRES_PASSWORD` и `DATABASE_URL`. Пример префикса: `ghcr.io/acme/countryhouse`.
+В `.env` укажите lowercase-владельца GitHub, публичный IP и один длинный буквенно-цифровой пароль одновременно в `POSTGRES_PASSWORD` и `DATABASE_URL`. Пример префикса: `ghcr.io/acme/countryhouse`. Для HTTPS задайте `COOKIE_SECURE=true`.
+
+При первом развёртывании поверх версии без авторизации также задайте `BOOTSTRAP_EMAIL` и `BOOTSTRAP_PASSWORD` (не менее 12 символов). Миграция передаст этому владельцу ранее созданные участки. На чистой базе эти значения не требуются.
 
 Создайте GitHub classic PAT только с `read:packages` и войдите в private GHCR на VM:
 
@@ -127,9 +129,13 @@ docker compose --env-file .env --env-file .release.env -f compose.prod.yml up -d
 
 ## API
 
-- `GET|POST /api/v1/plot`
-- `POST /api/v1/plot/objects`
-- `GET|POST /api/v1/expenses`
-- `GET|POST /api/v1/timeline/tasks`
+- `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, `GET /api/v1/auth/me`
+- `GET|POST /api/v1/plots`
+- `GET|PATCH|DELETE /api/v1/plots/{plotId}`
+- CRUD `/api/v1/plots/{plotId}/objects/{objectId}`
+- CRUD `/api/v1/plots/{plotId}/expenses/{expenseId}`
+- CRUD `/api/v1/plots/{plotId}/timeline/tasks/{taskId}`
+
+Авторизация использует серверную сессию в `HttpOnly` cookie. Все запросы к данным проверяют владельца участка; браузерный API-клиент должен отправлять cookies (`credentials: include`). Для изменяющих запросов backend проверяет `Origin`.
 
 Денежные значения передаются строками (`"12500.00"`), даты — в формате `YYYY-MM-DD`, геометрия — в метрах.
