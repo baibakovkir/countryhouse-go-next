@@ -1,12 +1,58 @@
 export type PlotObjectType = "building" | "garden_bed" | "tree";
 
-export interface User { id: string; email: string; createdAt: string }
-export interface PlotObject { id: string; type: PlotObjectType; name: string; x: number; y: number; z: number; width: number; length: number; height: number; createdAt: string; updatedAt: string }
-export interface Plot { id: string; name: string; width: number; length: number; objects: PlotObject[]; createdAt: string; updatedAt: string }
-export interface Expense { id: string; plotObjectId: string | null; category: string; amount: string; currency: string; date: string; description: string; createdAt: string; updatedAt: string }
-export interface TimelineTask { id: string; title: string; dueDate: string; plannedBudget: string | null; currency: string; description: string; createdAt: string; updatedAt: string }
+export interface User {
+  id: string;
+  email: string;
+  createdAt: string;
+}
+export interface PlotObject {
+  id: string;
+  type: PlotObjectType;
+  name: string;
+  x: number;
+  y: number;
+  z: number;
+  width: number;
+  length: number;
+  height: number;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface Plot {
+  id: string;
+  name: string;
+  width: number;
+  length: number;
+  objects: PlotObject[];
+  createdAt: string;
+  updatedAt: string;
+}
+export interface Expense {
+  id: string;
+  plotObjectId: string | null;
+  category: string;
+  amount: string;
+  currency: string;
+  date: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface TimelineTask {
+  id: string;
+  title: string;
+  dueDate: string;
+  plannedBudget: string | null;
+  currency: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
-export interface AuthInput { email: string; password: string }
+export interface AuthInput {
+  email: string;
+  password: string;
+}
 export type CreatePlot = Pick<Plot, "name" | "width" | "length">;
 export type UpdatePlot = Partial<CreatePlot>;
 export type CreatePlotObject = Omit<PlotObject, "id" | "createdAt" | "updatedAt">;

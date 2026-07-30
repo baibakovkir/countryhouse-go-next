@@ -1,22 +1,75 @@
 "use client";
-import { type FormEvent, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { FieldError } from "@/components/FieldError";
-import { PlotNav } from "@/components/PlotNav";
-import { StatusMessage } from "@/components/StatusMessage";
-import { errorDetails } from "@/lib/api";
-import { collect, date, money, required, type FieldErrors } from "@/lib/validation";
-import { useAuthStore } from "@/stores/auth-store";
-import { useDataStore } from "@/stores/data-store";
-import type { CreateExpense, Expense } from "@/types/domain";
 
-export default function ExpensesPage(){
- const {plotId}=useParams<{plotId:string}>();const router=useRouter();const status=useAuthStore((s)=>s.status);const {plot,expenses,loading,error,loadPlot,loadExpenses,createExpense,updateExpense,deleteExpense}=useDataStore();const [editing,setEditing]=useState<Expense|null>(null);const [errors,setErrors]=useState<FieldErrors>({});
- useEffect(()=>{if(status==="unauthenticated")router.replace("/login");if(status==="authenticated"){void loadPlot(plotId);void loadExpenses(plotId)}},[status,router,plotId,loadPlot,loadExpenses]);
- function parse(form:HTMLFormElement):CreateExpense{const d=new FormData(form);const object=String(d.get("plotObjectId"));return{plotObjectId:object||null,category:String(d.get("category")).trim(),amount:String(d.get("amount")),currency:"RUB",date:String(d.get("date")),description:String(d.get("description")).trim()}}
- function validate(form:HTMLFormElement){const d=new FormData(form);const next=collect([["category",required(String(d.get("category")),"Категория")],["amount",money(String(d.get("amount")))],["date",date(String(d.get("date")))]]);setErrors(next);return Object.keys(next).length===0}
- async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();if(!validate(e.currentTarget))return;const form=e.currentTarget;const value=parse(form);await (editing?updateExpense(plotId,editing.id,value):createExpense(plotId,value)).then(()=>{setEditing(null);form.reset()}).catch((error)=>setErrors(errorDetails(error)))}
- async function remove(item:Expense){if(confirm(`Удалить расход «${item.category}»?`))await deleteExpense(plotId,item.id).then(()=>setEditing(null)).catch(()=>undefined)}
- if(status!=="authenticated"||!plot)return <StatusMessage error={error} loading={true}/>;
- return <div className="space-y-5"><div className="flex flex-wrap items-end justify-between gap-3"><div><h1 className="text-3xl font-bold">Расходы · {plot.name}</h1><p className="text-slate-600">Общие траты и расходы по объектам.</p></div><PlotNav plotId={plotId}/></div><StatusMessage error={error} loading={loading}/><div className="grid gap-5 lg:grid-cols-[360px_1fr]"><form key={editing?.id??"new"} onSubmit={submit} noValidate className="panel h-fit space-y-3"><h2 className="text-xl font-semibold">{editing?"Изменить расход":"Новый расход"}</h2><label className="field">Категория<input className="input" name="category" defaultValue={editing?.category}/><FieldError message={errors.category}/></label><label className="field">Сумма, ₽<input className="input" name="amount" inputMode="decimal" defaultValue={editing?.amount}/><FieldError message={errors.amount}/></label><label className="field">Дата<input className="input" name="date" type="date" defaultValue={editing?.date}/><FieldError message={errors.date}/></label><label className="field">Объект<select className="input" name="plotObjectId" defaultValue={editing?.plotObjectId??""}><option value="">Общий расход</option>{plot.objects.map((object)=><option key={object.id} value={object.id}>{object.name}</option>)}</select></label><label className="field">Описание<textarea className="input min-h-20" name="description" defaultValue={editing?.description}/></label><button className="button w-full" disabled={loading}>{editing?"Сохранить":"Добавить"}</button>{editing&&<button type="button" className="input w-full" onClick={()=>setEditing(null)}>Отмена</button>}</form><section className="panel"><h2 className="text-xl font-semibold">История</h2>{expenses.length===0?<p className="mt-4 text-slate-500">Расходов пока нет.</p>:<div className="mt-4 divide-y divide-slate-100">{expenses.map((item)=><article key={item.id} className="flex flex-wrap items-start justify-between gap-3 py-4"><div><h3 className="font-semibold">{item.category}</h3><p className="text-sm text-slate-500">{item.date}{item.description?` · ${item.description}`:""}</p><div className="mt-2 flex gap-2"><button className="text-sm text-emerald-700 underline" onClick={()=>setEditing(item)}>Изменить</button><button className="text-sm text-red-700 underline" onClick={()=>void remove(item)}>Удалить</button></div></div><strong>{item.amount} {item.currency}</strong></article>)}</div>}</section></div></div>;
+import { type FormEvent, useState } from "react";
+import { useParams } from "next/navigation";
+import { PlotPageHeader } from "@/components/PlotPageHeader";
+import { StatusMessage } from "@/components/StatusMessage";
+import { ExpenseForm } from "@/features/expenses/ExpenseForm";
+import { ExpenseHistory } from "@/features/expenses/ExpenseHistory";
+import { readExpenseInput, validateExpenseInput } from "@/features/expenses/expense-input";
+import { errorDetails } from "@/lib/api";
+import type { FieldErrors } from "@/lib/validation";
+import { usePlotPage } from "@/features/plot/use-plot-page";
+import { useDataStore } from "@/stores/data-store";
+import type { Expense } from "@/types/domain";
+
+export default function ExpensesPage() {
+  const { plotId } = useParams<{ plotId: string }>();
+  const store = useDataStore();
+  const status = usePlotPage(plotId, store.loadPlot, store.loadExpenses);
+  const [editing, setEditing] = useState<Expense | null>(null);
+  const [errors, setErrors] = useState<FieldErrors>({});
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const next = validateExpenseInput(form);
+    setErrors(next);
+    if (Object.keys(next).length > 0) return;
+    const request = editing
+      ? store.updateExpense(plotId, editing.id, readExpenseInput(form))
+      : store.createExpense(plotId, readExpenseInput(form));
+    await request
+      .then(() => {
+        form.reset();
+        setEditing(null);
+      })
+      .catch((error) => setErrors(errorDetails(error)));
+  }
+
+  async function remove(item: Expense) {
+    if (!confirm(`Удалить расход «${item.category}»?`)) return;
+    await store
+      .deleteExpense(plotId, item.id)
+      .then(() => setEditing(null))
+      .catch(() => undefined);
+  }
+
+  if (status !== "authenticated" || !store.plot)
+    return <StatusMessage error={store.error} loading />;
+  return (
+    <div className="space-y-5">
+      <PlotPageHeader
+        plotId={plotId}
+        title={`Расходы · ${store.plot.name}`}
+        description="Общие траты и расходы по объектам."
+      />
+      <StatusMessage error={store.error} loading={store.loading} />
+      <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
+        <ExpenseForm
+          editing={editing}
+          objects={store.plot.objects}
+          loading={store.loading}
+          errors={errors}
+          onSubmit={submit}
+          onCancel={() => setEditing(null)}
+        />
+        <ExpenseHistory
+          expenses={store.expenses}
+          onEdit={setEditing}
+          onDelete={(item) => void remove(item)}
+        />
+      </div>
+    </div>
+  );
 }

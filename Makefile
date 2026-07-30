@@ -10,5 +10,4 @@ backend-test:
 	cd backend && go test -race ./...
 
 frontend-check:
-	cd frontend && npm run lint && npm test && npm run build
-
+	cd frontend && npm run check

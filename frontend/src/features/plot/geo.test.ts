@@ -11,4 +11,3 @@ describe("plot geometry", () => {
     expect(toScreenY(0, 2, 10, 10, 20)).toBe(100);
   });
 });
-

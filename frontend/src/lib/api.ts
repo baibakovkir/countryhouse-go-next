@@ -1,23 +1,58 @@
-import type { AuthInput, CreateExpense, CreatePlot, CreatePlotObject, CreateTimelineTask, Expense, Plot, PlotObject, TimelineTask, UpdateExpense, UpdatePlot, UpdatePlotObject, UpdateTimelineTask, User } from "@/types/domain";
+import type {
+  AuthInput,
+  CreateExpense,
+  CreatePlot,
+  CreatePlotObject,
+  CreateTimelineTask,
+  Expense,
+  Plot,
+  PlotObject,
+  TimelineTask,
+  UpdateExpense,
+  UpdatePlot,
+  UpdatePlotObject,
+  UpdateTimelineTask,
+  User,
+} from "@/types/domain";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-interface ErrorEnvelope { error?: { code?: string; message?: string; details?: Record<string, string> } }
+interface ErrorEnvelope {
+  error?: { code?: string; message?: string; details?: Record<string, string> };
+}
 
 export class ApiError extends Error {
-  constructor(public readonly status: number, message: string, public readonly code?: string, public readonly details: Record<string, string> = {}) { super(message); }
+  constructor(
+    public readonly status: number,
+    message: string,
+    public readonly code?: string,
+    public readonly details: Record<string, string> = {},
+  ) {
+    super(message);
+  }
 }
-export const errorDetails = (error: unknown): Record<string, string> => error instanceof ApiError ? error.details : {};
+export const errorDetails = (error: unknown): Record<string, string> =>
+  error instanceof ApiError ? error.details : {};
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, { ...init, credentials: "include", headers: { "Content-Type": "application/json", ...init?.headers } });
+  const response = await fetch(`${API_URL}${path}`, {
+    ...init,
+    credentials: "include",
+    headers: { "Content-Type": "application/json", ...init?.headers },
+  });
   if (!response.ok) {
     const payload = (await response.json().catch(() => ({}))) as ErrorEnvelope;
-    throw new ApiError(response.status, payload.error?.message ?? "Request failed", payload.error?.code, payload.error?.details);
+    throw new ApiError(
+      response.status,
+      payload.error?.message ?? "Request failed",
+      payload.error?.code,
+      payload.error?.details,
+    );
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
-const send = <T>(method: "POST" | "PATCH", path: string, body: unknown) => request<T>(path, { method, body: JSON.stringify(body) });
+const send = <T>(method: "POST" | "PATCH", path: string, body: unknown) =>
+  request<T>(path, { method, body: JSON.stringify(body) });
 const remove = (path: string) => request<void>(path, { method: "DELETE" });
 const base = (plotId: string) => `/api/v1/plots/${plotId}`;
 
@@ -31,15 +66,21 @@ export const api = {
   getPlot: (id: string) => request<Plot>(`${base(id)}/`),
   updatePlot: (id: string, input: UpdatePlot) => send<Plot>("PATCH", `${base(id)}/`, input),
   deletePlot: (id: string) => remove(`${base(id)}/`),
-  createObject: (plotId: string, input: CreatePlotObject) => send<PlotObject>("POST", `${base(plotId)}/objects/`, input),
-  updateObject: (plotId: string, id: string, input: UpdatePlotObject) => send<PlotObject>("PATCH", `${base(plotId)}/objects/${id}/`, input),
+  createObject: (plotId: string, input: CreatePlotObject) =>
+    send<PlotObject>("POST", `${base(plotId)}/objects/`, input),
+  updateObject: (plotId: string, id: string, input: UpdatePlotObject) =>
+    send<PlotObject>("PATCH", `${base(plotId)}/objects/${id}/`, input),
   deleteObject: (plotId: string, id: string) => remove(`${base(plotId)}/objects/${id}/`),
   listExpenses: (plotId: string) => request<Expense[]>(`${base(plotId)}/expenses/`),
-  createExpense: (plotId: string, input: CreateExpense) => send<Expense>("POST", `${base(plotId)}/expenses/`, input),
-  updateExpense: (plotId: string, id: string, input: UpdateExpense) => send<Expense>("PATCH", `${base(plotId)}/expenses/${id}/`, input),
+  createExpense: (plotId: string, input: CreateExpense) =>
+    send<Expense>("POST", `${base(plotId)}/expenses/`, input),
+  updateExpense: (plotId: string, id: string, input: UpdateExpense) =>
+    send<Expense>("PATCH", `${base(plotId)}/expenses/${id}/`, input),
   deleteExpense: (plotId: string, id: string) => remove(`${base(plotId)}/expenses/${id}/`),
   listTasks: (plotId: string) => request<TimelineTask[]>(`${base(plotId)}/timeline/tasks/`),
-  createTask: (plotId: string, input: CreateTimelineTask) => send<TimelineTask>("POST", `${base(plotId)}/timeline/tasks/`, input),
-  updateTask: (plotId: string, id: string, input: UpdateTimelineTask) => send<TimelineTask>("PATCH", `${base(plotId)}/timeline/tasks/${id}/`, input),
+  createTask: (plotId: string, input: CreateTimelineTask) =>
+    send<TimelineTask>("POST", `${base(plotId)}/timeline/tasks/`, input),
+  updateTask: (plotId: string, id: string, input: UpdateTimelineTask) =>
+    send<TimelineTask>("PATCH", `${base(plotId)}/timeline/tasks/${id}/`, input),
   deleteTask: (plotId: string, id: string) => remove(`${base(plotId)}/timeline/tasks/${id}/`),
 };

@@ -14,7 +14,12 @@ export function toScreenX(x: number, scale: number, padding: number): number {
   return padding + x * scale;
 }
 
-export function toScreenY(y: number, objectLength: number, plotLength: number, scale: number, padding: number): number {
+export function toScreenY(
+  y: number,
+  objectLength: number,
+  plotLength: number,
+  scale: number,
+  padding: number,
+): number {
   return padding + (plotLength - y - objectLength) * scale;
 }
-

@@ -15,4 +15,3 @@ export const useEditorStore = create<EditorState>((set) => ({
   select: (selectedObjectId) => set({ selectedObjectId }),
   setZoom: (zoom) => set({ zoom: Math.min(2, Math.max(0.5, zoom)) }),
 }));
-

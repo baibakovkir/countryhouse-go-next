@@ -1,22 +1,70 @@
 "use client";
-import { type FormEvent, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { FieldError } from "@/components/FieldError";
-import { PlotNav } from "@/components/PlotNav";
-import { StatusMessage } from "@/components/StatusMessage";
-import { errorDetails } from "@/lib/api";
-import { collect, date, money, required, type FieldErrors } from "@/lib/validation";
-import { useAuthStore } from "@/stores/auth-store";
-import { useDataStore } from "@/stores/data-store";
-import type { CreateTimelineTask, TimelineTask } from "@/types/domain";
 
-export default function TimelinePage(){
- const {plotId}=useParams<{plotId:string}>();const router=useRouter();const status=useAuthStore((s)=>s.status);const {plot,tasks,loading,error,loadPlot,loadTasks,createTask,updateTask,deleteTask}=useDataStore();const [editing,setEditing]=useState<TimelineTask|null>(null);const [errors,setErrors]=useState<FieldErrors>({});
- useEffect(()=>{if(status==="unauthenticated")router.replace("/login");if(status==="authenticated"){void loadPlot(plotId);void loadTasks(plotId)}},[status,router,plotId,loadPlot,loadTasks]);
- function parse(form:HTMLFormElement):CreateTimelineTask{const d=new FormData(form);const budget=String(d.get("plannedBudget"));return{title:String(d.get("title")).trim(),dueDate:String(d.get("dueDate")),plannedBudget:budget||null,currency:"RUB",description:String(d.get("description")).trim()}}
- function validate(form:HTMLFormElement){const d=new FormData(form);const budget=String(d.get("plannedBudget"));const next=collect([["title",required(String(d.get("title")),"Название")],["dueDate",date(String(d.get("dueDate")))],["plannedBudget",budget?money(budget,true):undefined]]);setErrors(next);return Object.keys(next).length===0}
- async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();if(!validate(e.currentTarget))return;const form=e.currentTarget;const value=parse(form);await (editing?updateTask(plotId,editing.id,value):createTask(plotId,value)).then(()=>{setEditing(null);form.reset()}).catch((error)=>setErrors(errorDetails(error)))}
- async function remove(item:TimelineTask){if(confirm(`Удалить задачу «${item.title}»?`))await deleteTask(plotId,item.id).then(()=>setEditing(null)).catch(()=>undefined)}
- if(status!=="authenticated"||!plot)return <StatusMessage error={error} loading={true}/>;
- return <div className="space-y-5"><div className="flex flex-wrap items-end justify-between gap-3"><div><h1 className="text-3xl font-bold">Работы · {plot.name}</h1><p className="text-slate-600">Задачи отсортированы по сроку.</p></div><PlotNav plotId={plotId}/></div><StatusMessage error={error} loading={loading}/><div className="grid gap-5 lg:grid-cols-[360px_1fr]"><form key={editing?.id??"new"} onSubmit={submit} noValidate className="panel h-fit space-y-3"><h2 className="text-xl font-semibold">{editing?"Изменить задачу":"Новая задача"}</h2><label className="field">Что сделать<input className="input" name="title" defaultValue={editing?.title}/><FieldError message={errors.title}/></label><label className="field">Срок<input className="input" name="dueDate" type="date" defaultValue={editing?.dueDate}/><FieldError message={errors.dueDate}/></label><label className="field">Плановый бюджет, ₽<input className="input" name="plannedBudget" inputMode="decimal" defaultValue={editing?.plannedBudget??""}/><FieldError message={errors.plannedBudget}/></label><label className="field">Описание<textarea className="input min-h-20" name="description" defaultValue={editing?.description}/></label><button className="button w-full" disabled={loading}>{editing?"Сохранить":"Добавить"}</button>{editing&&<button type="button" className="input w-full" onClick={()=>setEditing(null)}>Отмена</button>}</form><section className="panel"><h2 className="text-xl font-semibold">Ближайшие работы</h2>{tasks.length===0?<p className="mt-4 text-slate-500">Задач пока нет.</p>:<ol className="mt-4 space-y-3">{tasks.map((task)=><li key={task.id} className="rounded-lg border border-slate-200 p-4"><div className="flex flex-wrap justify-between gap-2"><h3 className="font-semibold">{task.title}</h3><time className="text-sm font-medium text-emerald-800">{task.dueDate}</time></div>{task.description&&<p className="mt-2 text-sm text-slate-600">{task.description}</p>}{task.plannedBudget!==null&&<p className="mt-2 text-sm">Бюджет: <strong>{task.plannedBudget} {task.currency}</strong></p>}<div className="mt-3 flex gap-2"><button className="text-sm text-emerald-700 underline" onClick={()=>setEditing(task)}>Изменить</button><button className="text-sm text-red-700 underline" onClick={()=>void remove(task)}>Удалить</button></div></li>)}</ol>}</section></div></div>;
+import { type FormEvent, useState } from "react";
+import { useParams } from "next/navigation";
+import { PlotPageHeader } from "@/components/PlotPageHeader";
+import { StatusMessage } from "@/components/StatusMessage";
+import { TaskForm } from "@/features/timeline/TaskForm";
+import { TaskList } from "@/features/timeline/TaskList";
+import { readTaskInput, validateTaskInput } from "@/features/timeline/task-input";
+import { errorDetails } from "@/lib/api";
+import type { FieldErrors } from "@/lib/validation";
+import { usePlotPage } from "@/features/plot/use-plot-page";
+import { useDataStore } from "@/stores/data-store";
+import type { TimelineTask } from "@/types/domain";
+
+export default function TimelinePage() {
+  const { plotId } = useParams<{ plotId: string }>();
+  const store = useDataStore();
+  const status = usePlotPage(plotId, store.loadPlot, store.loadTasks);
+  const [editing, setEditing] = useState<TimelineTask | null>(null);
+  const [errors, setErrors] = useState<FieldErrors>({});
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const next = validateTaskInput(form);
+    setErrors(next);
+    if (Object.keys(next).length > 0) return;
+    const request = editing
+      ? store.updateTask(plotId, editing.id, readTaskInput(form))
+      : store.createTask(plotId, readTaskInput(form));
+    await request
+      .then(() => {
+        form.reset();
+        setEditing(null);
+      })
+      .catch((error) => setErrors(errorDetails(error)));
+  }
+
+  async function remove(item: TimelineTask) {
+    if (!confirm(`Удалить задачу «${item.title}»?`)) return;
+    await store
+      .deleteTask(plotId, item.id)
+      .then(() => setEditing(null))
+      .catch(() => undefined);
+  }
+
+  if (status !== "authenticated" || !store.plot)
+    return <StatusMessage error={store.error} loading />;
+  return (
+    <div className="space-y-5">
+      <PlotPageHeader
+        plotId={plotId}
+        title={`Работы · ${store.plot.name}`}
+        description="Задачи отсортированы по сроку."
+      />
+      <StatusMessage error={store.error} loading={store.loading} />
+      <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
+        <TaskForm
+          editing={editing}
+          loading={store.loading}
+          errors={errors}
+          onSubmit={submit}
+          onCancel={() => setEditing(null)}
+        />
+        <TaskList tasks={store.tasks} onEdit={setEditing} onDelete={(item) => void remove(item)} />
+      </div>
+    </div>
+  );
 }

@@ -35,7 +35,7 @@ npm ci
 NEXT_PUBLIC_API_URL='http://localhost:8080' npm run dev
 ```
 
-Проверки запускаются командами `make backend-test` и `make frontend-check`.
+Проверки запускаются командами `make backend-test` и `make frontend-check`. Для frontend также доступны `npm run format`, `npm run format:check` и `npm run lint:fix`.
 
 ## Развёртывание на VM
 
