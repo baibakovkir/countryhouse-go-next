@@ -1,0 +1,82 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [private]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    image: ${GHCR_IMAGE_PREFIX:?GHCR_IMAGE_PREFIX is required}-migrations:${IMAGE_TAG:?IMAGE_TAG is required}
+    command: ["-path=/migrations", "-database", "${DATABASE_URL:?DATABASE_URL is required}", "up"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [private]
+    restart: "no"
+
+  backend:
+    image: ${GHCR_IMAGE_PREFIX:?GHCR_IMAGE_PREFIX is required}-backend:${IMAGE_TAG:?IMAGE_TAG is required}
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      HTTP_ADDR: :8080
+      CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN:?CORS_ALLOWED_ORIGIN is required}
+    expose: ["8080"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks: [private]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  frontend:
+    image: ${GHCR_IMAGE_PREFIX:?GHCR_IMAGE_PREFIX is required}-frontend:${IMAGE_TAG:?IMAGE_TAG is required}
+    expose: ["3000"]
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [private]
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.10-alpine
+    environment:
+      CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS:?CADDY_SITE_ADDRESS is required}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    networks: [private, public]
+    restart: unless-stopped
+
+networks:
+  private:
+    internal: true
+  public:
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

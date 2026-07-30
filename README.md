@@ -12,7 +12,118 @@
 
 ## Локальная разработка
 
-Запустите PostgreSQL через Compose, примените миграцию и задайте `DATABASE_URL`. Затем используйте `go run ./cmd/api` из `backend` и `npm run dev` из `frontend`. Проверки запускаются командами `make backend-test` и `make frontend-check`.
+Запустите PostgreSQL и примените миграцию:
+
+```bash
+docker compose up -d postgres
+docker compose run --rm migrate
+```
+
+Backend использует адрес БД на хосте, а не имя контейнера:
+
+```bash
+cd backend
+DATABASE_URL='postgres://countryhouse:countryhouse_dev@localhost:5432/countryhouse?sslmode=disable' \
+CORS_ALLOWED_ORIGIN='http://localhost:3000' go run ./cmd/api
+```
+
+Frontend запускается в другом терминале:
+
+```bash
+cd frontend
+npm ci
+NEXT_PUBLIC_API_URL='http://localhost:8080' npm run dev
+```
+
+Проверки запускаются командами `make backend-test` и `make frontend-check`.
+
+## Развёртывание на VM
+
+Production использует `compose.prod.yml`: наружу смотрит только Caddy, а PostgreSQL, backend и frontend находятся во внутренней Docker-сети. CI публикует три приватных образа в GHCR и разворачивает immutable-тег вида `sha-<commit>`.
+
+### 1. Подготовка VM
+
+Рекомендуемая базовая конфигурация: Ubuntu 24.04 LTS, 2 vCPU, 4 GB RAM и 30 GB SSD. Установите Docker Engine и Compose plugin из официального Docker-репозитория. Создайте пользователя `deploy`, добавьте его SSH-ключ и разрешите ему запуск Docker.
+
+Откройте в firewall `22/tcp` и `80/tcp`. Порты `3000`, `5432` и `8080` открывать нельзя. При подключении домена дополнительно откройте `443/tcp` и `443/udp`.
+
+```bash
+sudo install -d -o deploy -g deploy -m 750 /opt/countryhouse
+sudo install -d -o deploy -g deploy -m 750 /var/backups/countryhouse
+```
+
+Скопируйте на VM `compose.prod.yml`, `Caddyfile`, `ops/backup.sh`, `.env.production.example` и создайте секреты:
+
+```bash
+cd /opt/countryhouse
+cp .env.production.example .env
+chmod 600 .env
+printf '%s\n' 'IMAGE_TAG=sha-<existing-commit-sha>' > .release.env
+chmod 600 .release.env
+```
+
+В `.env` укажите lowercase-владельца GitHub, публичный IP и один длинный буквенно-цифровой пароль одновременно в `POSTGRES_PASSWORD` и `DATABASE_URL`. Пример префикса: `ghcr.io/acme/countryhouse`.
+
+Создайте GitHub classic PAT только с `read:packages` и войдите в private GHCR на VM:
+
+```bash
+echo "$GHCR_TOKEN" | docker login ghcr.io -u <github-user> --password-stdin
+```
+
+### 2. Первый запуск
+
+```bash
+cd /opt/countryhouse
+docker compose --env-file .env --env-file .release.env -f compose.prod.yml pull
+docker compose --env-file .env --env-file .release.env -f compose.prod.yml up -d
+docker compose --env-file .env --env-file .release.env -f compose.prod.yml ps
+curl --fail http://<VM_IP>/healthz
+```
+
+`migrate` должен завершиться с кодом `0`. В браузере приложение открывается по `http://<VM_IP>`; прямого доступа к backend и PostgreSQL нет.
+
+### 3. Автоматический deploy
+
+В GitHub создайте environment `production` и secrets:
+
+- `VM_HOST` — IP VM;
+- `VM_USER` — `deploy`;
+- `VM_PORT` — SSH-порт, можно оставить пустым для `22`;
+- `VM_SSH_KEY` — приватный deploy-ключ без passphrase.
+- `VM_KNOWN_HOSTS` — заранее проверенная строка host key VM из `ssh-keyscan -H <VM_HOST>`; fingerprint следует отдельно сверить через консоль облачного провайдера.
+
+После push в `main` workflow проверяет код, публикует образы в GHCR, загружает production-конфигурацию на VM, записывает новый SHA в `.release.env`, выполняет `pull/up` и проверяет `/healthz`. Постоянный `.env` через CI не передаётся.
+
+### 4. Backup и rollback
+
+Проверить backup вручную:
+
+```bash
+/opt/countryhouse/backup.sh
+```
+
+Добавьте ежедневный запуск от пользователя `deploy`, например в `crontab -e`:
+
+```cron
+0 3 * * * /opt/countryhouse/backup.sh >> /var/backups/countryhouse/backup.log 2>&1
+```
+
+Локальные dump-файлы хранятся 14 дней. Для внешней копии установите `restic` и добавьте `RESTIC_REPOSITORY`, `RESTIC_PASSWORD` и credentials S3-совместимого хранилища в защищённый `.env`.
+
+Для отката замените тег на предыдущий успешный SHA:
+
+```bash
+cd /opt/countryhouse
+printf '%s\n' 'IMAGE_TAG=sha-<previous-commit-sha>' > .release.env
+docker compose --env-file .env --env-file .release.env -f compose.prod.yml pull
+docker compose --env-file .env --env-file .release.env -f compose.prod.yml up -d
+```
+
+Откат образов не откатывает БД, поэтому production-миграции должны оставаться обратно совместимыми.
+
+### 5. Переход на HTTPS
+
+После появления домена направьте DNS A-запись на VM, замените `CADDY_SITE_ADDRESS=http://<IP>` на доменное имя без протокола, обновите `CORS_ALLOWED_ORIGIN=https://<domain>` и откройте `443`. Caddy автоматически запросит и будет обновлять TLS-сертификат.
 
 ## API
 
@@ -22,4 +133,3 @@
 - `GET|POST /api/v1/timeline/tasks`
 
 Денежные значения передаются строками (`"12500.00"`), даты — в формате `YYYY-MM-DD`, геометрия — в метрах.
-

@@ -62,19 +62,93 @@ jobs:
   images:
     runs-on: ubuntu-latest
     needs: [backend, frontend]
+    permissions:
+      contents: read
+      packages: write
     strategy:
       matrix:
         include:
-          - name: backend
+          - name: countryhouse-backend
             context: backend
-          - name: frontend
+            dockerfile: backend/Dockerfile
+            build_args: ""
+          - name: countryhouse-frontend
             context: frontend
+            dockerfile: frontend/Dockerfile
+            build_args: NEXT_PUBLIC_API_URL=
+          - name: countryhouse-migrations
+            context: backend
+            dockerfile: backend/Dockerfile.migrations
+            build_args: ""
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
+      - id: registry
+        name: Normalize registry owner
+        shell: bash
+        run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+      - name: Log in to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
-          push: false
-          tags: countryhouse-${{ matrix.name }}:ci
+          file: ${{ matrix.dockerfile }}
+          build-args: ${{ matrix.build_args }}
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: |
+            ghcr.io/${{ steps.registry.outputs.owner }}/${{ matrix.name }}:sha-${{ github.sha }}
+            ghcr.io/${{ steps.registry.outputs.owner }}/${{ matrix.name }}:latest
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: images
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_KNOWN_HOSTS: ${{ secrets.VM_KNOWN_HOSTS }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -eu
+          install -m 700 -d ~/.ssh
+          printf '%s' "$VM_SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$VM_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519
+          chmod 644 ~/.ssh/known_hosts
+      - name: Upload deployment configuration
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_PORT: ${{ secrets.VM_PORT }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          port="${VM_PORT:-22}"
+          scp -P "$port" compose.prod.yml Caddyfile ops/backup.sh "$VM_USER@$VM_HOST:/opt/countryhouse/"
+      - name: Deploy immutable release
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_PORT: ${{ secrets.VM_PORT }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -eu
+          port="${VM_PORT:-22}"
+          ssh -p "$port" "$VM_USER@$VM_HOST" "
+            set -eu
+            cd /opt/countryhouse
+            chmod 750 backup.sh
+            if [ -f .release.env ]; then cp .release.env .release.env.previous; fi
+            printf '%s\n' 'IMAGE_TAG=sha-${GITHUB_SHA}' > .release.env.next
+            mv .release.env.next .release.env
+            docker compose --env-file .env --env-file .release.env -f compose.prod.yml pull
+            docker compose --env-file .env --env-file .release.env -f compose.prod.yml up -d --remove-orphans
+            curl --fail --retry 12 --retry-delay 5 http://localhost/healthz
+          "
