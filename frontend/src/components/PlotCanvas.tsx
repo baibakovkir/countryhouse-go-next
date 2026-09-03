@@ -9,17 +9,21 @@ import {
   toScreenX,
   toScreenY,
 } from "@/features/plot/geo";
-import type { PlotObject } from "@/types/domain";
+import type { PlotObject, PlotPoint } from "@/types/domain";
 
 interface PlotCanvasProps {
   width: number;
   length: number;
   objects: PlotObject[];
+  terrainPoints?: PlotPoint[];
   selectedObjectId?: string | null;
   gridStep?: number;
   zoom?: number;
   onSelect?: (id: string) => void;
   onMove?: (id: string, position: { x: number; y: number }) => Promise<void>;
+  terrainEditing?: boolean;
+  onMovePoint?: (id: string, index: number, point: PlotPoint) => Promise<void>;
+  onMoveTerrainPoint?: (index: number, point: PlotPoint) => Promise<void>;
 }
 
 const viewport = { width: 900, height: 620, padding: 58 };
@@ -29,21 +33,34 @@ const colors: Partial<Record<PlotObject["type"], string>> = {
   tree: "#16a34a",
 };
 type DragState = { id: string; pointerId: number; offsetX: number; offsetY: number };
+type PointDrag = {
+  kind: "object" | "terrain";
+  id?: string;
+  index: number;
+  pointerId: number;
+  z: number;
+};
 
 // eslint-disable-next-line max-lines-per-function
 export function PlotCanvas({
   width,
   length,
   objects,
+  terrainPoints = [],
   selectedObjectId,
   gridStep = 1,
   zoom = 1,
   onSelect,
   onMove,
+  terrainEditing = false,
+  onMovePoint,
+  onMoveTerrainPoint,
 }: PlotCanvasProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [preview, setPreview] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [pointDrag, setPointDrag] = useState<PointDrag | null>(null);
+  const [pointPreview, setPointPreview] = useState<PlotPoint | null>(null);
   const scale = calculateScale(width, length, viewport) * zoom;
   const pixelWidth = width * scale;
   const pixelLength = length * scale;
@@ -71,6 +88,10 @@ export function PlotCanvas({
 
   function startDrag(event: React.PointerEvent<SVGGElement>, object: PlotObject) {
     if (!onMove || event.button !== 0) return;
+    if (object.geometry !== "footprint") {
+      onSelect?.(object.id);
+      return;
+    }
     const point = pointerPosition(event as unknown as React.PointerEvent<SVGSVGElement>);
     if (!point) return;
     event.stopPropagation();
@@ -86,6 +107,16 @@ export function PlotCanvas({
   }
 
   function moveDrag(event: React.PointerEvent<SVGSVGElement>) {
+    if (pointDrag) {
+      const point = pointerPosition(event);
+      if (!point || pointDrag.pointerId !== event.pointerId) return;
+      setPointPreview({
+        x: Math.min(width, Math.max(0, snapToGrid(point.x, gridStep))),
+        y: Math.min(length, Math.max(0, snapToGrid(point.y, gridStep))),
+        z: pointDrag.z,
+      });
+      return;
+    }
     if (!drag || drag.pointerId !== event.pointerId) return;
     const object = objects.find((item) => item.id === drag.id);
     const point = pointerPosition(event);
@@ -101,7 +132,21 @@ export function PlotCanvas({
     setPreview({ id: object.id, ...position });
   }
 
+  // eslint-disable-next-line complexity
   async function finishDrag(event: React.PointerEvent<SVGSVGElement>) {
+    if (pointDrag && pointDrag.pointerId === event.pointerId) {
+      const finished = pointPreview;
+      const active = pointDrag;
+      setPointDrag(null);
+      setPointPreview(null);
+      if (finished) {
+        if (active.kind === "terrain" && onMoveTerrainPoint)
+          await onMoveTerrainPoint(active.index, finished);
+        if (active.kind === "object" && active.id && onMovePoint)
+          await onMovePoint(active.id, active.index, finished);
+      }
+      return;
+    }
     if (!drag || drag.pointerId !== event.pointerId) return;
     const finished = preview;
     setDrag(null);
@@ -144,6 +189,29 @@ export function PlotCanvas({
           pixelWidth={pixelWidth}
           scale={scale}
         />
+        <g aria-label="Высотные отметки">
+          {terrainPoints.map((point, index) => (
+            <g key={`${point.x}-${point.y}-${index}`}>
+              <circle
+                cx={toScreenX(point.x, scale, viewport.padding)}
+                cy={toScreenY(point.y, 0, length, scale, viewport.padding)}
+                r="7"
+                fill="#f8fafc"
+                stroke="#047857"
+                strokeWidth="3"
+              />
+              <text
+                x={toScreenX(point.x, scale, viewport.padding) + 10}
+                y={toScreenY(point.y, 0, length, scale, viewport.padding) - 8}
+                fontSize="11"
+                fill="#065f46"
+              >
+                {point.z >= 0 ? "+" : ""}
+                {point.z} м
+              </text>
+            </g>
+          ))}
+        </g>
         <PlotObjects
           objects={displayedObjects}
           plotLength={length}
@@ -152,11 +220,107 @@ export function PlotCanvas({
           onSelect={onSelect}
           onPointerDown={startDrag}
         />
+        <PointHandles
+          objects={displayedObjects}
+          terrainPoints={terrainPoints}
+          terrainEditing={terrainEditing}
+          selectedObjectId={selectedObjectId}
+          plotLength={length}
+          scale={scale}
+          preview={pointPreview}
+          drag={pointDrag}
+          onStart={(event, next) => {
+            event.stopPropagation();
+            event.currentTarget.setPointerCapture(event.pointerId);
+            setDrag(null);
+            setPointDrag({ ...next, pointerId: event.pointerId });
+            setPointPreview(
+              next.kind === "terrain"
+                ? terrainPoints[next.index]
+                : (objects.find((item) => item.id === next.id)?.points[next.index] ?? null),
+            );
+          }}
+        />
         <text x={viewport.padding} y={viewport.padding - 28} fontSize="13" fill="#475569">
           {width} × {length} м · начало координат слева снизу
         </text>
       </svg>
     </div>
+  );
+}
+
+function PointHandles({
+  objects,
+  terrainPoints,
+  terrainEditing,
+  selectedObjectId,
+  plotLength,
+  scale,
+  preview,
+  drag,
+  onStart,
+}: {
+  objects: PlotObject[];
+  terrainPoints: PlotPoint[];
+  terrainEditing: boolean;
+  selectedObjectId?: string | null;
+  plotLength: number;
+  scale: number;
+  preview: PlotPoint | null;
+  drag: PointDrag | null;
+  onStart(event: React.PointerEvent<SVGGElement>, drag: Omit<PointDrag, "pointerId">): void;
+}) {
+  const selected = objects.find((object) => object.id === selectedObjectId);
+  const source = terrainEditing
+    ? terrainPoints.map((point, index) => ({ point, index, kind: "terrain" as const }))
+    : (selected?.points ?? []).map((point, index) => ({
+        point,
+        index,
+        kind: "object" as const,
+        id: selected?.id,
+      }));
+  return (
+    <g>
+      {source.map((item) => {
+        const id = item.kind === "object" ? item.id : undefined;
+        const point =
+          drag?.kind === item.kind &&
+          drag.index === item.index &&
+          (item.kind === "terrain" || drag.id === id) &&
+          preview
+            ? preview
+            : item.point;
+        return (
+          <g
+            key={`${item.kind}-${item.index}`}
+            role="button"
+            aria-label={`Точка ${item.index + 1}: X ${point.x}, Y ${point.y}`}
+            className="cursor-grab touch-none"
+            onPointerDown={(event) =>
+              onStart(event, { kind: item.kind, id, index: item.index, z: point.z })
+            }
+          >
+            <circle
+              cx={toScreenX(point.x, scale, viewport.padding)}
+              cy={toScreenY(point.y, 0, plotLength, scale, viewport.padding)}
+              r="11"
+              fill="white"
+              stroke="#059669"
+              strokeWidth="4"
+            />
+            <text
+              x={toScreenX(point.x, scale, viewport.padding) + 15}
+              y={toScreenY(point.y, 0, plotLength, scale, viewport.padding) + 4}
+              fontSize="12"
+              fontWeight="700"
+              fill="#064e3b"
+            >
+              {point.x}; {point.y}
+            </text>
+          </g>
+        );
+      })}
+    </g>
   );
 }
 

@@ -2,7 +2,14 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect } from "react";
-import { Controller, type FieldErrors, type UseFormRegister, useForm } from "react-hook-form";
+import {
+  Controller,
+  type Control,
+  type FieldErrors,
+  type UseFormRegister,
+  useForm,
+  useWatch,
+} from "react-hook-form";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { TextField } from "@/components/ui/FormField";
@@ -131,7 +138,7 @@ export function PlotObjectForm({
         )}
       />
       <TextField label="Название" error={fieldError(errors, "name")} {...register("name")} />
-      <GeometryFields register={register} errors={errors} />
+      <GeometryFields register={register} control={control} errors={errors} />
       {errors.root?.server?.message && (
         <p className="text-sm text-red-700">{errors.root.server.message}</p>
       )}
@@ -160,9 +167,11 @@ function ObjectFormHeader({ editing }: { editing: boolean }) {
 
 function GeometryFields({
   register,
+  control,
   errors,
 }: {
   register: UseFormRegister<ObjectFormValues>;
+  control: Control<ObjectFormValues, unknown, ObjectFormOutput>;
   errors: FieldErrors<ObjectFormValues>;
 }) {
   return (
@@ -205,17 +214,100 @@ function GeometryFields({
         error={fieldError(errors, "z")}
         {...register("z")}
       />
-      <TextField
-        label="Точки JSON (для трасс/полигонов)"
-        error={fieldError(errors, "points")}
-        {...register("points")}
-      />
-      <TextField
-        label="Свойства JSON"
-        error={fieldError(errors, "properties")}
-        {...register("properties")}
-      />
+      <PointEditor control={control} error={fieldError(errors, "points")} />
+      <input type="hidden" {...register("properties")} />
     </>
+  );
+}
+
+// eslint-disable-next-line max-lines-per-function
+function PointEditor({
+  control,
+  error,
+}: {
+  control: Control<ObjectFormValues, unknown, ObjectFormOutput>;
+  error?: string;
+}) {
+  const geometry = useWatch({ control, name: "geometry" });
+  if (geometry === "footprint") return null;
+  return (
+    <Controller
+      name="points"
+      control={control}
+      render={({ field }) => {
+        let points: Array<{ x: number; y: number; z: number }> = [];
+        try {
+          points = JSON.parse(field.value || "[]") as typeof points;
+        } catch {
+          /* validation shows the error */
+        }
+        const change = (index: number, key: "x" | "y" | "z", value: string) => {
+          const next = points.map((point, pointIndex) =>
+            pointIndex === index ? { ...point, [key]: Number(value) } : point,
+          );
+          field.onChange(JSON.stringify(next));
+        };
+        return (
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium text-slate-700">
+              {geometry === "polyline" ? "Точки трассы" : "Вершины полигона"}
+            </legend>
+            <p className="text-xs text-slate-500">
+              Координаты указаны в метрах от левого нижнего угла участка.
+            </p>
+            {points.map((point, index) => (
+              <div key={index} className="grid grid-cols-[1fr_1fr_1fr_44px] gap-2">
+                <input
+                  aria-label={`X точки ${index + 1}`}
+                  className="ui-input min-w-0"
+                  type="number"
+                  step="any"
+                  value={point.x}
+                  onChange={(event) => change(index, "x", event.target.value)}
+                />
+                <input
+                  aria-label={`Y точки ${index + 1}`}
+                  className="ui-input min-w-0"
+                  type="number"
+                  step="any"
+                  value={point.y}
+                  onChange={(event) => change(index, "y", event.target.value)}
+                />
+                <input
+                  aria-label={`Z точки ${index + 1}`}
+                  className="ui-input min-w-0"
+                  type="number"
+                  step="any"
+                  value={point.z}
+                  onChange={(event) => change(index, "z", event.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  aria-label={`Удалить точку ${index + 1}`}
+                  onClick={() =>
+                    field.onChange(
+                      JSON.stringify(points.filter((_, pointIndex) => pointIndex !== index)),
+                    )
+                  }
+                >
+                  ×
+                </Button>
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full"
+              onClick={() => field.onChange(JSON.stringify([...points, { x: 0, y: 0, z: 0 }]))}
+            >
+              Добавить точку
+            </Button>
+            {error && <p className="text-xs font-medium text-red-600">{error}</p>}
+          </fieldset>
+        );
+      }}
+    />
   );
 }
 
@@ -227,7 +319,7 @@ function ObjectFormActions({
 }: Pick<PlotObjectFormProps, "current" | "loading" | "onCreateNew" | "onDelete">) {
   return (
     <>
-      <Button className="w-full" disabled={loading}>
+      <Button className="w-full" type="submit" disabled={loading}>
         {current ? "Сохранить" : "Добавить"}
       </Button>
       {current && (

@@ -19,7 +19,7 @@ func (s *Service) Create(ctx context.Context, ownerID, name string, width, lengt
 	if err := plot.ValidateDimensions(width, length); err != nil {
 		return plot.Plot{}, err
 	}
-	return s.repo.Create(ctx, plot.Plot{OwnerID: ownerID, Name: name, Width: width, Length: length, Objects: []plot.Object{}})
+	return s.repo.Create(ctx, plot.Plot{OwnerID: ownerID, Name: name, Width: width, Length: length, TerrainPoints: []plot.Point{}, Objects: []plot.Object{}})
 }
 
 func (s *Service) List(ctx context.Context, ownerID string) ([]plot.Plot, error) {
@@ -30,7 +30,7 @@ func (s *Service) Get(ctx context.Context, ownerID, plotID string) (plot.Plot, e
 	return s.repo.Get(ctx, ownerID, plotID)
 }
 
-func (s *Service) Update(ctx context.Context, ownerID, plotID string, name *string, width, length *float64) (plot.Plot, error) {
+func (s *Service) Update(ctx context.Context, ownerID, plotID string, name *string, width, length *float64, terrainPoints *[]plot.Point) (plot.Plot, error) {
 	current, err := s.repo.Get(ctx, ownerID, plotID)
 	if err != nil {
 		return plot.Plot{}, err
@@ -44,10 +44,16 @@ func (s *Service) Update(ctx context.Context, ownerID, plotID string, name *stri
 	if length != nil {
 		current.Length = *length
 	}
+	if terrainPoints != nil {
+		current.TerrainPoints = *terrainPoints
+	}
 	if err := plot.ValidateName(current.Name); err != nil {
 		return plot.Plot{}, err
 	}
 	if err := plot.ValidateDimensions(current.Width, current.Length); err != nil {
+		return plot.Plot{}, err
+	}
+	if err := plot.ValidateTerrainPoints(current); err != nil {
 		return plot.Plot{}, err
 	}
 	for _, object := range current.Objects {

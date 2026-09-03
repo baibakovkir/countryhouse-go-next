@@ -92,7 +92,7 @@ export function ExpenseForm({ editing, objects, loading, onSave, onCancel }: Exp
       {errors.root?.server?.message && (
         <p className="text-sm text-red-700">{errors.root.server.message}</p>
       )}
-      <Button className="w-full" disabled={loading}>
+      <Button className="w-full" type="submit" disabled={loading}>
         {editing ? "Сохранить" : "Добавить"}
       </Button>
       {editing && (

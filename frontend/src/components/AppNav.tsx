@@ -23,7 +23,7 @@ export function AppNav() {
           aria-label="baibakovkir — сервис планировщика участка"
         >
           <Image
-            src="/brand-mark.svg"
+            src="/logo-small.png"
             alt=""
             width={36}
             height={36}

@@ -28,8 +28,12 @@ interface PlotWorkspaceProps {
   onViewMode(value: "2d" | "3d"): void;
   onSelect(id: string): void;
   onMove(id: string, position: { x: number; y: number }): Promise<void>;
+  terrainEditing: boolean;
+  onMovePoint(id: string, index: number, point: { x: number; y: number; z: number }): Promise<void>;
+  onMoveTerrainPoint(index: number, point: { x: number; y: number; z: number }): Promise<void>;
 }
 
+// eslint-disable-next-line max-lines-per-function
 export function PlotWorkspace({
   plot,
   selectedObjectId,
@@ -40,6 +44,9 @@ export function PlotWorkspace({
   onViewMode,
   onSelect,
   onMove,
+  terrainEditing,
+  onMovePoint,
+  onMoveTerrainPoint,
 }: PlotWorkspaceProps) {
   return (
     <section className="space-y-3">
@@ -94,11 +101,15 @@ export function PlotWorkspace({
             width={plot.width}
             length={plot.length}
             objects={plot.objects}
+            terrainPoints={plot.terrainPoints ?? []}
             selectedObjectId={selectedObjectId}
             gridStep={gridStep}
             zoom={zoom}
             onSelect={onSelect}
             onMove={onMove}
+            terrainEditing={terrainEditing}
+            onMovePoint={onMovePoint}
+            onMoveTerrainPoint={onMoveTerrainPoint}
           />
         </Tabs.Panel>
         <Tabs.Panel value="3d" className="outline-none">

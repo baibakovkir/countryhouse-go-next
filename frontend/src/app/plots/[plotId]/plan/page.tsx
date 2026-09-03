@@ -1,23 +1,27 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { PlotPageHeader } from "@/components/PlotPageHeader";
 import { StatusMessage } from "@/components/StatusMessage";
 import type { ObjectFormOutput } from "@/features/plot/object-input";
 import { PlotObjectForm } from "@/features/plot/PlotObjectForm";
 import { PlotWorkspace } from "@/features/plot/PlotWorkspace";
+import { TerrainEditor } from "@/features/plot/TerrainEditor";
 import { usePlotPage } from "@/features/plot/use-plot-page";
 import { useDataStore } from "@/stores/data-store";
 import { useEditorStore } from "@/stores/editor-store";
 import type { PlotObject } from "@/types/domain";
 
+// eslint-disable-next-line max-lines-per-function
 export default function PlotPlanPage() {
   const { plotId } = useParams<{ plotId: string }>();
   const store = useDataStore();
   const status = usePlotPage(plotId, store.loadPlot);
   const editor = useEditorStore();
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [terrainEditing, setTerrainEditing] = useState(false);
   async function save(input: ObjectFormOutput) {
     if (!store.plot) return;
     const request = editingId
@@ -60,19 +64,58 @@ export default function PlotPlanPage() {
           onZoom={editor.setZoom}
           onViewMode={editor.setViewMode}
           onSelect={(id) => {
+            setTerrainEditing(false);
             editor.select(id);
             setEditingId(id);
           }}
           onMove={(id, position) => store.updateObject(plotId, id, position)}
+          terrainEditing={terrainEditing}
+          onMovePoint={(id, index, point) => {
+            const object = store.plot?.objects.find((item) => item.id === id);
+            if (!object) return Promise.resolve();
+            const points = object.points.map((item, pointIndex) =>
+              pointIndex === index ? point : item,
+            );
+            return store.updateObject(plotId, id, { points });
+          }}
+          onMoveTerrainPoint={(index, point) => {
+            if (!store.plot) return Promise.resolve();
+            const terrainPoints = store.plot.terrainPoints.map((item, pointIndex) =>
+              pointIndex === index ? point : item,
+            );
+            return store.updatePlot(plotId, { terrainPoints });
+          }}
         />
-        <PlotObjectForm
-          plot={store.plot}
-          current={current}
-          loading={store.loading}
-          onSave={save}
-          onCreateNew={clearSelection}
-          onDelete={remove}
-        />
+        <div className="space-y-5">
+          <TerrainEditor
+            points={store.plot.terrainPoints ?? []}
+            width={store.plot.width}
+            length={store.plot.length}
+            loading={store.loading}
+            onSave={(terrainPoints) => store.updatePlot(plotId, { terrainPoints })}
+            editingOnPlan={terrainEditing}
+            onEditingOnPlan={(value) => {
+              setTerrainEditing(value);
+              if (value) clearSelection();
+            }}
+          />
+          <PlotObjectForm
+            plot={store.plot}
+            current={current}
+            loading={store.loading}
+            onSave={save}
+            onCreateNew={clearSelection}
+            onDelete={remove}
+          />
+          {current?.type === "building" && (
+            <Link
+              className="ui-link-button w-full"
+              href={`/plots/${plotId}/buildings/${current.id}`}
+            >
+              Открыть план здания
+            </Link>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -2,6 +2,8 @@
 
 import { Html, OrbitControls } from "@react-three/drei";
 import { Canvas, type ThreeEvent } from "@react-three/fiber";
+import { useLayoutEffect, useRef } from "react";
+import type { Mesh } from "three";
 import { cameraDistance, objectWorldPosition } from "@/features/plot/geo3d";
 import type { Plot, PlotObject } from "@/types/domain";
 
@@ -45,10 +47,7 @@ export function Plot3DScene({ plot, selectedObjectId, onSelect }: Plot3DScenePro
           intensity={2.2}
           castShadow
         />
-        <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-          <planeGeometry args={[plot.width, plot.length]} />
-          <meshStandardMaterial color="#d1fae5" />
-        </mesh>
+        <TerrainSurface plot={plot} />
         <gridHelper
           args={[gridSize, Math.max(2, Math.ceil(gridSize)), "#94a3b8", "#cbd5e1"]}
           position={[0, 0.01, 0]}
@@ -74,6 +73,43 @@ export function Plot3DScene({ plot, selectedObjectId, onSelect }: Plot3DScenePro
   );
 }
 
+function terrainHeight(x: number, y: number, plot: Plot) {
+  const points = plot.terrainPoints ?? [];
+  if (points.length === 0) return 0;
+  let weighted = 0;
+  let weights = 0;
+  for (const point of points) {
+    const distanceSquared = (x - point.x) ** 2 + (y - point.y) ** 2;
+    if (distanceSquared < 0.0001) return point.z;
+    const weight = 1 / distanceSquared;
+    weighted += point.z * weight;
+    weights += weight;
+  }
+  return weighted / weights;
+}
+
+function TerrainSurface({ plot }: { plot: Plot }) {
+  const mesh = useRef<Mesh>(null);
+  useLayoutEffect(() => {
+    const geometry = mesh.current?.geometry;
+    const positions = geometry?.attributes.position;
+    if (!geometry || !positions) return;
+    for (let index = 0; index < positions.count; index++) {
+      const plotX = positions.getX(index) + plot.width / 2;
+      const plotY = plot.length / 2 - positions.getY(index);
+      positions.setZ(index, terrainHeight(plotX, plotY, plot));
+    }
+    positions.needsUpdate = true;
+    geometry.computeVertexNormals();
+  }, [plot]);
+  return (
+    <mesh ref={mesh} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      <planeGeometry args={[plot.width, plot.length, 32, 32]} />
+      <meshStandardMaterial color="#d1fae5" />
+    </mesh>
+  );
+}
+
 function SceneObject({
   object,
   plot,
@@ -87,10 +123,17 @@ function SceneObject({
 }) {
   const renderedHeight = Math.max(object.height, object.type === "garden_bed" ? 0.25 : 1);
   const position = objectWorldPosition(object, plot, renderedHeight);
+  position[1] += terrainHeight(object.x + object.width / 2, object.y + object.length / 2, plot);
   const select = (event: ThreeEvent<MouseEvent>) => {
     event.stopPropagation();
     onSelect(object.id);
   };
+
+  if (object.type === "building" && object.building) {
+    return (
+      <BuildingMesh object={object} position={position} selected={selected} onSelect={select} />
+    );
+  }
 
   if (object.type === "tree") {
     const radius = Math.max(0.25, Math.min(object.width, object.length) / 3);
@@ -121,6 +164,94 @@ function SceneObject({
         />
       </mesh>
       <ObjectLabel name={object.name} y={renderedHeight / 2 + 0.3} />
+    </group>
+  );
+}
+
+const wallColors = {
+  wood: "#a16207",
+  brick: "#b4533c",
+  block: "#d6d3d1",
+  siding: "#e2e8f0",
+  custom: "#64748b",
+} as const;
+
+function BuildingMesh({
+  object,
+  position,
+  selected,
+  onSelect,
+}: {
+  object: PlotObject;
+  position: [number, number, number];
+  selected: boolean;
+  onSelect(event: ThreeEvent<MouseEvent>): void;
+}) {
+  const config = object.building!;
+  const bodyHeight = Math.max(config.totalHeight, object.height, 2.4);
+  const roofHeight =
+    config.roofType === "flat" ? 0.18 : Math.min(2, Math.max(0.6, object.width / 4));
+  const adjustedPosition: [number, number, number] = [
+    position[0],
+    position[1] - Math.max(object.height, 1) / 2 + bodyHeight / 2,
+    position[2],
+  ];
+  const roofY = bodyHeight / 2 + roofHeight / 2;
+  return (
+    <group position={adjustedPosition} onClick={onSelect}>
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[object.width, bodyHeight, object.length]} />
+        <meshStandardMaterial color={selected ? "#10b981" : wallColors[config.wallMaterial]} />
+      </mesh>
+      {Array.from({ length: Math.max(1, config.floorCount) }, (_, index) => (
+        <mesh
+          key={index}
+          position={[
+            0,
+            -bodyHeight / 2 + (index + 0.55) * (bodyHeight / Math.max(1, config.floorCount)),
+            object.length / 2 + 0.012,
+          ]}
+        >
+          <planeGeometry
+            args={[
+              Math.min(1.4, object.width * 0.22),
+              Math.min(1.2, (bodyHeight / config.floorCount) * 0.45),
+            ]}
+          />
+          <meshStandardMaterial color="#bae6fd" emissive="#0c4a6e" emissiveIntensity={0.12} />
+        </mesh>
+      ))}
+      {config.kind === "garage" && (
+        <mesh position={[0, -bodyHeight * 0.14, object.length / 2 + 0.018]}>
+          <planeGeometry
+            args={[Math.min(object.width * 0.65, 3.4), Math.min(bodyHeight * 0.62, 2.5)]}
+          />
+          <meshStandardMaterial color="#475569" />
+        </mesh>
+      )}
+      {config.roofType === "flat" ? (
+        <mesh position={[0, roofY, 0]}>
+          <boxGeometry args={[object.width + 0.25, roofHeight, object.length + 0.25]} />
+          <meshStandardMaterial color="#334155" />
+        </mesh>
+      ) : (
+        <mesh position={[0, roofY, 0]} rotation={[0, 0, Math.PI / 4]}>
+          <boxGeometry
+            args={[roofHeight * Math.SQRT2, object.width * 0.76, object.length + 0.35]}
+          />
+          <meshStandardMaterial color={config.kind === "bathhouse" ? "#713f12" : "#334155"} />
+        </mesh>
+      )}
+      {config.kind === "bathhouse" && (
+        <mesh position={[object.width * 0.25, bodyHeight / 2 + roofHeight * 0.8, 0]}>
+          <cylinderGeometry args={[0.12, 0.16, 1, 12]} />
+          <meshStandardMaterial color="#44403c" />
+        </mesh>
+      )}
+      <ObjectLabel
+        name={`${object.name} · ${config.floorCount} эт.`}
+        y={bodyHeight / 2 + roofHeight + 0.35}
+      />
     </group>
   );
 }

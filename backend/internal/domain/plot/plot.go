@@ -37,14 +37,15 @@ type Point struct {
 }
 
 type Plot struct {
-	ID        string    `json:"id"`
-	OwnerID   string    `json:"-"`
-	Name      string    `json:"name"`
-	Width     float64   `json:"width"`
-	Length    float64   `json:"length"`
-	Objects   []Object  `json:"objects"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID            string    `json:"id"`
+	OwnerID       string    `json:"-"`
+	Name          string    `json:"name"`
+	Width         float64   `json:"width"`
+	Length        float64   `json:"length"`
+	TerrainPoints []Point   `json:"terrainPoints"`
+	Objects       []Object  `json:"objects"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
 type Object struct {
@@ -61,8 +62,17 @@ type Object struct {
 	Geometry   GeometryType    `json:"geometry"`
 	Points     []Point         `json:"points,omitempty"`
 	Properties json.RawMessage `json:"properties,omitempty"`
+	Building   *BuildingView   `json:"building,omitempty"`
 	CreatedAt  time.Time       `json:"createdAt"`
 	UpdatedAt  time.Time       `json:"updatedAt"`
+}
+
+type BuildingView struct {
+	Kind         string  `json:"kind"`
+	RoofType     string  `json:"roofType"`
+	WallMaterial string  `json:"wallMaterial"`
+	FloorCount   int     `json:"floorCount"`
+	TotalHeight  float64 `json:"totalHeight"`
 }
 
 type Repository interface {
@@ -92,6 +102,15 @@ func ValidateDimensions(width, length float64) error {
 	return nil
 }
 
+func ValidateTerrainPoints(p Plot) error {
+	for _, point := range p.TerrainPoints {
+		if math.IsNaN(point.X) || math.IsNaN(point.Y) || math.IsNaN(point.Z) || math.IsInf(point.X, 0) || math.IsInf(point.Y, 0) || math.IsInf(point.Z, 0) || point.X < 0 || point.Y < 0 || point.X > p.Width || point.Y > p.Length {
+			return domainerr.Field("terrainPoints", "terrain points must be finite and inside plot bounds")
+		}
+	}
+	return nil
+}
+
 func ValidateObject(p Plot, o Object) error {
 	if strings.TrimSpace(o.Name) == "" {
 		return domainerr.Field("name", "is required")
@@ -117,8 +136,11 @@ func ValidateObject(p Plot, o Object) error {
 	if o.Geometry != Footprint && o.Geometry != Polyline && o.Geometry != Polygon {
 		return domainerr.Field("geometry", "must be footprint, polyline or polygon")
 	}
-	if (o.Geometry == Polyline || o.Geometry == Polygon) && len(o.Points) < 2 {
+	if o.Geometry == Polyline && len(o.Points) < 2 {
 		return domainerr.Field("points", "at least two points are required")
+	}
+	if o.Geometry == Polygon && len(o.Points) < 3 {
+		return domainerr.Field("points", "at least three points are required")
 	}
 	for _, point := range o.Points {
 		if math.IsNaN(point.X) || math.IsNaN(point.Y) || math.IsNaN(point.Z) || math.IsInf(point.X, 0) || math.IsInf(point.Y, 0) || math.IsInf(point.Z, 0) || point.X < 0 || point.Y < 0 || point.X > p.Width || point.Y > p.Length {
