@@ -45,7 +45,7 @@ Production использует `compose.prod.yml`: PostgreSQL остаётся 
 
 Целевая VM — `176.123.163.174`, пользователь `user`; Docker Engine, Compose plugin, Nginx и Certbot уже установлены. Пользователь должен иметь доступ к Docker и право выполнять одноразовые административные команды через `sudo`.
 
-Создайте DNS A-запись `countryhouse.baibakovkir.space` на `176.123.163.174`. В firewall должны быть открыты `22/tcp`, `80/tcp` и `443/tcp`. Порты `13000`, `18080` и `5432` открывать нельзя.
+Создайте DNS A-запись `countryhouse.baibakovkir.space` на `176.123.163.174`. В firewall должны быть открыты `22/tcp`, `80/tcp` и `443/tcp`. Порты `13000`, `15432`, `18080` и `5432` открывать нельзя: они привязаны только к loopback ВМ.
 
 ```bash
 sudo install -d -o user -g user -m 750 /opt/countryhouse
@@ -122,6 +122,8 @@ Pull request запускает проверки и тестовую сборк�
 ```
 
 Локальные dump-файлы хранятся 14 дней. Для внешней копии установите `restic` и добавьте `RESTIC_REPOSITORY`, `RESTIC_PASSWORD` и credentials S3-совместимого хранилища в защищённый `.env`.
+
+Для администрирования PostgreSQL используйте SSH-туннель, не открывая БД в интернет. В pgAdmin задайте SSH host `176.123.163.174`, SSH user `user` и deploy-ключ; для подключения к БД используйте host `127.0.0.1` и port `15432`. Имя БД, пользователь и пароль берутся из `/opt/countryhouse/.env`.
 
 Для отката замените тег на предыдущий успешный SHA:
 
