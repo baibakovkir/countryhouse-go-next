@@ -2,6 +2,7 @@ package authapp
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -73,8 +74,8 @@ func TestLoginUsesGenericUnauthorizedError(t *testing.T) {
 	repo := &fakeRepository{}
 	service := New(repo)
 	_, err := service.Login(context.Background(), "missing@example.com", "some password")
-	typed, ok := err.(*domainerr.Error)
-	if !ok || typed.Kind != domainerr.Unauthorized {
+	var typed *domainerr.Error
+	if !errors.As(err, &typed) || typed.Kind != domainerr.Unauthorized {
 		t.Fatalf("Login() error = %#v", err)
 	}
 }
