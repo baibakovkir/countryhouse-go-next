@@ -166,7 +166,9 @@ jobs:
             deployed=true
             docker compose --env-file .env --env-file .release.env -f compose.prod.yml up -d --remove-orphans || deployed=false
             curl --fail --retry 12 --retry-delay 5 http://127.0.0.1:18080/healthz || deployed=false
-            curl --fail --retry 12 --retry-delay 5 https://countryhouse.baibakovkir.space/healthz || deployed=false
+            curl --fail --retry 12 --retry-delay 5 \
+              --resolve countryhouse.baibakovkir.space:443:127.0.0.1 \
+              https://countryhouse.baibakovkir.space/healthz || deployed=false
 
             if [ "$deployed" != true ]; then
               if [ -f .release.env.previous ]; then
