@@ -21,6 +21,18 @@ const signedMetric = (label: string) =>
     .refine((value) => Number.isFinite(Number(value)), `${label} должно быть числом`)
     .transform(Number);
 
+const pointSchema = z.object({
+  x: z.number().finite(),
+  y: z.number().finite(),
+  z: z.number().finite(),
+});
+
+function minimumPointCount(geometry: "footprint" | "polyline" | "polygon") {
+  if (geometry === "polygon") return 3;
+  if (geometry === "polyline") return 2;
+  return 0;
+}
+
 export function createObjectSchema(plot: Pick<Plot, "width" | "length">) {
   return z
     .object({
@@ -40,8 +52,7 @@ export function createObjectSchema(plot: Pick<Plot, "width" | "length">) {
         .transform((value, context) => {
           try {
             const points: unknown = JSON.parse(value);
-            if (!Array.isArray(points)) throw new Error();
-            return points as Array<{ x: number; y: number; z: number }>;
+            return z.array(pointSchema).parse(points);
           } catch {
             context.addIssue({ code: "custom", message: "Точки должны быть JSON-массивом" });
             return z.NEVER;
@@ -64,6 +75,24 @@ export function createObjectSchema(plot: Pick<Plot, "width" | "length">) {
         }),
     })
     .superRefine((value, context) => {
+      const minimumPoints = minimumPointCount(value.geometry);
+      if (value.points.length < minimumPoints) {
+        context.addIssue({
+          code: "custom",
+          path: ["points"],
+          message: `Добавьте минимум ${minimumPoints} точки`,
+        });
+      }
+      for (const point of value.points) {
+        if (point.x < 0 || point.y < 0 || point.x > plot.width || point.y > plot.length) {
+          context.addIssue({
+            code: "custom",
+            path: ["points"],
+            message: "Все точки должны быть в границах участка",
+          });
+          break;
+        }
+      }
       if (value.geometry === "footprint" && value.x + value.width > plot.width) {
         context.addIssue({
           code: "custom",

@@ -106,7 +106,9 @@ function PlotEditCard({
         <TextField label="Длина, м" error={errors.length?.message} {...register("length")} />
       </div>
       <div className="flex gap-2">
-        <Button disabled={loading}>Сохранить</Button>
+        <Button type="submit" disabled={loading}>
+          Сохранить
+        </Button>
         <Button type="button" variant="secondary" onClick={onCancel}>
           Отмена
         </Button>

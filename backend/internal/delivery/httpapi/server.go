@@ -185,9 +185,10 @@ type createPlotRequest struct {
 	Length float64 `json:"length"`
 }
 type updatePlotRequest struct {
-	Name   *string  `json:"name"`
-	Width  *float64 `json:"width"`
-	Length *float64 `json:"length"`
+	Name          *string       `json:"name"`
+	Width         *float64      `json:"width"`
+	Length        *float64      `json:"length"`
+	TerrainPoints *[]plot.Point `json:"terrainPoints"`
 }
 
 func (s *Server) listPlots(w http.ResponseWriter, r *http.Request) {
@@ -223,11 +224,11 @@ func (s *Server) updatePlot(w http.ResponseWriter, r *http.Request) {
 	if !s.decode(w, r, &in) {
 		return
 	}
-	if in.Name == nil && in.Width == nil && in.Length == nil {
+	if in.Name == nil && in.Width == nil && in.Length == nil && in.TerrainPoints == nil {
 		s.writeError(w, domainerr.Field("request", "must include at least one field"))
 		return
 	}
-	item, err := s.plot.Update(r.Context(), currentUser(r).ID, chi.URLParam(r, "plotId"), in.Name, in.Width, in.Length)
+	item, err := s.plot.Update(r.Context(), currentUser(r).ID, chi.URLParam(r, "plotId"), in.Name, in.Width, in.Length, in.TerrainPoints)
 	if err != nil {
 		s.writeError(w, err)
 		return

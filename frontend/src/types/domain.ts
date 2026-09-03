@@ -33,6 +33,7 @@ export interface Plot {
   name: string;
   width: number;
   length: number;
+  terrainPoints: PlotPoint[];
   objects: PlotObject[];
   createdAt: string;
   updatedAt: string;
@@ -64,7 +65,7 @@ export interface AuthInput {
   password: string;
 }
 export type CreatePlot = Pick<Plot, "name" | "width" | "length">;
-export type UpdatePlot = Partial<CreatePlot>;
+export type UpdatePlot = Partial<Pick<Plot, "name" | "width" | "length" | "terrainPoints">>;
 export type CreatePlotObject = Omit<PlotObject, "id" | "createdAt" | "updatedAt">;
 export type UpdatePlotObject = Partial<CreatePlotObject>;
 export type CreateExpense = Omit<Expense, "id" | "createdAt" | "updatedAt">;

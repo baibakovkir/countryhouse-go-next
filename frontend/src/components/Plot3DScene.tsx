@@ -2,6 +2,8 @@
 
 import { Html, OrbitControls } from "@react-three/drei";
 import { Canvas, type ThreeEvent } from "@react-three/fiber";
+import { useLayoutEffect, useRef } from "react";
+import type { Mesh } from "three";
 import { cameraDistance, objectWorldPosition } from "@/features/plot/geo3d";
 import type { Plot, PlotObject } from "@/types/domain";
 
@@ -45,10 +47,7 @@ export function Plot3DScene({ plot, selectedObjectId, onSelect }: Plot3DScenePro
           intensity={2.2}
           castShadow
         />
-        <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-          <planeGeometry args={[plot.width, plot.length]} />
-          <meshStandardMaterial color="#d1fae5" />
-        </mesh>
+        <TerrainSurface plot={plot} />
         <gridHelper
           args={[gridSize, Math.max(2, Math.ceil(gridSize)), "#94a3b8", "#cbd5e1"]}
           position={[0, 0.01, 0]}
@@ -74,6 +73,43 @@ export function Plot3DScene({ plot, selectedObjectId, onSelect }: Plot3DScenePro
   );
 }
 
+function terrainHeight(x: number, y: number, plot: Plot) {
+  const points = plot.terrainPoints ?? [];
+  if (points.length === 0) return 0;
+  let weighted = 0;
+  let weights = 0;
+  for (const point of points) {
+    const distanceSquared = (x - point.x) ** 2 + (y - point.y) ** 2;
+    if (distanceSquared < 0.0001) return point.z;
+    const weight = 1 / distanceSquared;
+    weighted += point.z * weight;
+    weights += weight;
+  }
+  return weighted / weights;
+}
+
+function TerrainSurface({ plot }: { plot: Plot }) {
+  const mesh = useRef<Mesh>(null);
+  useLayoutEffect(() => {
+    const geometry = mesh.current?.geometry;
+    const positions = geometry?.attributes.position;
+    if (!geometry || !positions) return;
+    for (let index = 0; index < positions.count; index++) {
+      const plotX = positions.getX(index) + plot.width / 2;
+      const plotY = plot.length / 2 - positions.getY(index);
+      positions.setZ(index, terrainHeight(plotX, plotY, plot));
+    }
+    positions.needsUpdate = true;
+    geometry.computeVertexNormals();
+  }, [plot]);
+  return (
+    <mesh ref={mesh} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      <planeGeometry args={[plot.width, plot.length, 32, 32]} />
+      <meshStandardMaterial color="#d1fae5" />
+    </mesh>
+  );
+}
+
 function SceneObject({
   object,
   plot,
@@ -87,6 +123,7 @@ function SceneObject({
 }) {
   const renderedHeight = Math.max(object.height, object.type === "garden_bed" ? 0.25 : 1);
   const position = objectWorldPosition(object, plot, renderedHeight);
+  position[1] += terrainHeight(object.x + object.width / 2, object.y + object.length / 2, plot);
   const select = (event: ThreeEvent<MouseEvent>) => {
     event.stopPropagation();
     onSelect(object.id);

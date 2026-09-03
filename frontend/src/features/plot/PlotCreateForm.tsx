@@ -55,7 +55,7 @@ export function PlotCreateForm({ loading, onCreate, onCreated }: PlotCreateFormP
         error={errors.length?.message}
         {...register("length")}
       />
-      <Button className="self-end" disabled={loading}>
+      <Button className="self-end" type="submit" disabled={loading}>
         Создать
       </Button>
     </form>

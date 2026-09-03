@@ -29,3 +29,15 @@ func TestValidateObjectSupportsVerticalAndLinearElements(t *testing.T) {
 		t.Fatal("single-point polyline accepted")
 	}
 }
+
+func TestValidateTerrainPoints(t *testing.T) {
+	t.Parallel()
+	p := Plot{Width: 10, Length: 20, TerrainPoints: []Point{{X: 0, Y: 0, Z: -1.2}, {X: 10, Y: 20, Z: 2.4}}}
+	if err := ValidateTerrainPoints(p); err != nil {
+		t.Fatalf("valid terrain points rejected: %v", err)
+	}
+	p.TerrainPoints = append(p.TerrainPoints, Point{X: 11, Y: 3, Z: 0})
+	if err := ValidateTerrainPoints(p); err == nil {
+		t.Fatal("terrain point outside plot bounds accepted")
+	}
+}

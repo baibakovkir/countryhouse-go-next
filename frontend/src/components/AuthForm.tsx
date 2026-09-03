@@ -75,7 +75,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         confirmation={isRegistration}
         autoComplete={text.autoComplete}
       />
-      <Button className="w-full" disabled={loading}>
+      <Button className="w-full" type="submit" disabled={loading}>
         {text.submit}
       </Button>
       <p className="text-sm text-slate-600">
