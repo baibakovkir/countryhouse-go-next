@@ -125,10 +125,11 @@ jobs:
         run: |
           set -eu
           install -m 700 -d ~/.ssh
-          printf '%s' "$VM_SSH_KEY" > ~/.ssh/id_deploy
+          printf '%s\n' "$VM_SSH_KEY" | tr -d '\r' > ~/.ssh/id_deploy
           printf '%s\n' "$VM_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/id_deploy
           chmod 644 ~/.ssh/known_hosts
+          ssh-keygen -y -f ~/.ssh/id_deploy > /dev/null
       - name: Upload deployment configuration
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
