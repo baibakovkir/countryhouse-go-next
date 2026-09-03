@@ -27,6 +27,7 @@ interface PlotWorkspaceProps {
   onZoom(value: number): void;
   onViewMode(value: "2d" | "3d"): void;
   onSelect(id: string): void;
+  onMove(id: string, position: { x: number; y: number }): Promise<void>;
 }
 
 export function PlotWorkspace({
@@ -38,6 +39,7 @@ export function PlotWorkspace({
   onZoom,
   onViewMode,
   onSelect,
+  onMove,
 }: PlotWorkspaceProps) {
   return (
     <section className="space-y-3">
@@ -96,6 +98,7 @@ export function PlotWorkspace({
             gridStep={gridStep}
             zoom={zoom}
             onSelect={onSelect}
+            onMove={onMove}
           />
         </Tabs.Panel>
         <Tabs.Panel value="3d" className="outline-none">

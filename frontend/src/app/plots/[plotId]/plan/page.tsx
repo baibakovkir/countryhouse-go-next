@@ -17,17 +17,17 @@ export default function PlotPlanPage() {
   const store = useDataStore();
   const status = usePlotPage(plotId, store.loadPlot);
   const editor = useEditorStore();
-  const [editing, setEditing] = useState<PlotObject | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   async function save(input: ObjectFormOutput) {
     if (!store.plot) return;
-    const request = editing
-      ? store.updateObject(plotId, editing.id, input)
+    const request = editingId
+      ? store.updateObject(plotId, editingId, input)
       : store.createObject(plotId, input);
     await request;
   }
 
   function clearSelection() {
-    setEditing(null);
+    setEditingId(null);
     editor.select(null);
   }
 
@@ -41,7 +41,7 @@ export default function PlotPlanPage() {
   if (status !== "authenticated" || !store.plot)
     return <StatusMessage error={store.error} loading />;
   const current =
-    editing ?? store.plot.objects.find((item) => item.id === editor.selectedObjectId) ?? null;
+    store.plot.objects.find((item) => item.id === (editingId ?? editor.selectedObjectId)) ?? null;
   return (
     <div className="space-y-5">
       <PlotPageHeader
@@ -61,8 +61,9 @@ export default function PlotPlanPage() {
           onViewMode={editor.setViewMode}
           onSelect={(id) => {
             editor.select(id);
-            setEditing(store.plot?.objects.find((object) => object.id === id) ?? null);
+            setEditingId(id);
           }}
+          onMove={(id, position) => store.updateObject(plotId, id, position)}
         />
         <PlotObjectForm
           plot={store.plot}
