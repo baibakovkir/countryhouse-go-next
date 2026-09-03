@@ -112,6 +112,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: images
     environment: production
+    concurrency:
+      group: production
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - name: Configure SSH
@@ -122,9 +125,9 @@ jobs:
         run: |
           set -eu
           install -m 700 -d ~/.ssh
-          printf '%s' "$VM_SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s' "$VM_SSH_KEY" > ~/.ssh/id_deploy
           printf '%s\n' "$VM_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_deploy
           chmod 644 ~/.ssh/known_hosts
       - name: Upload deployment configuration
         env:
@@ -133,7 +136,7 @@ jobs:
           VM_USER: ${{ secrets.VM_USER }}
         run: |
           port="${VM_PORT:-22}"
-          scp -P "$port" compose.prod.yml Caddyfile ops/backup.sh "$VM_USER@$VM_HOST:/opt/countryhouse/"
+          scp -i ~/.ssh/id_deploy -P "$port" compose.prod.yml ops/backup.sh "$VM_USER@$VM_HOST:/opt/countryhouse/"
       - name: Deploy immutable release
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
@@ -142,14 +145,33 @@ jobs:
         run: |
           set -eu
           port="${VM_PORT:-22}"
-          ssh -p "$port" "$VM_USER@$VM_HOST" "
+          ssh -i ~/.ssh/id_deploy -p "$port" "$VM_USER@$VM_HOST" "NEW_IMAGE_TAG=sha-${GITHUB_SHA} sh -s" <<'REMOTE'
             set -eu
             cd /opt/countryhouse
             chmod 750 backup.sh
-            if [ -f .release.env ]; then cp .release.env .release.env.previous; fi
-            printf '%s\n' 'IMAGE_TAG=sha-${GITHUB_SHA}' > .release.env.next
+
+            if [ -f .release.env ]; then
+              cp .release.env .release.env.previous
+              if docker compose --env-file .env --env-file .release.env -f compose.prod.yml ps --status running --services | grep -qx postgres; then
+                ./backup.sh
+              fi
+            fi
+
+            printf 'IMAGE_TAG=%s\n' "$NEW_IMAGE_TAG" > .release.env.next
+            docker compose --env-file .env --env-file .release.env.next -f compose.prod.yml config --quiet
+            docker compose --env-file .env --env-file .release.env.next -f compose.prod.yml pull
             mv .release.env.next .release.env
-            docker compose --env-file .env --env-file .release.env -f compose.prod.yml pull
-            docker compose --env-file .env --env-file .release.env -f compose.prod.yml up -d --remove-orphans
-            curl --fail --retry 12 --retry-delay 5 http://localhost/healthz
-          "
+
+            deployed=true
+            docker compose --env-file .env --env-file .release.env -f compose.prod.yml up -d --remove-orphans || deployed=false
+            curl --fail --retry 12 --retry-delay 5 http://127.0.0.1:18080/healthz || deployed=false
+            curl --fail --retry 12 --retry-delay 5 https://countryhouse.baibakovkir.space/healthz || deployed=false
+
+            if [ "$deployed" != true ]; then
+              if [ -f .release.env.previous ]; then
+                cp .release.env.previous .release.env
+                docker compose --env-file .env --env-file .release.env -f compose.prod.yml up -d --remove-orphans
+              fi
+              exit 1
+            fi
+          REMOTE

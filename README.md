@@ -39,20 +39,30 @@ NEXT_PUBLIC_API_URL='http://localhost:8080' npm run dev
 
 ## Развёртывание на VM
 
-Production использует `compose.prod.yml`: наружу смотрит только Caddy, а PostgreSQL, backend и frontend находятся во внутренней Docker-сети. CI публикует три приватных образа в GHCR и разворачивает immutable-тег вида `sha-<commit>`.
+Production использует `compose.prod.yml`: PostgreSQL остаётся внутри Docker, а backend и frontend публикуются только на loopback-портах `18080` и `13000`. Системный Nginx завершает TLS и остаётся единственной публичной точкой входа. CI публикует три приватных образа в GHCR и разворачивает immutable-тег вида `sha-<commit>`.
 
 ### 1. Подготовка VM
 
-Рекомендуемая базовая конфигурация: Ubuntu 24.04 LTS, 2 vCPU, 4 GB RAM и 30 GB SSD. Установите Docker Engine и Compose plugin из официального Docker-репозитория. Создайте пользователя `deploy`, добавьте его SSH-ключ и разрешите ему запуск Docker.
+Целевая VM — `176.123.163.174`, пользователь `user`; Docker Engine, Compose plugin, Nginx и Certbot уже установлены. Пользователь должен иметь доступ к Docker и право выполнять одноразовые административные команды через `sudo`.
 
-Откройте в firewall `22/tcp` и `80/tcp`. Порты `3000`, `5432` и `8080` открывать нельзя. При подключении домена дополнительно откройте `443/tcp` и `443/udp`.
+Создайте DNS A-запись `countryhouse.baibakovkir.space` на `176.123.163.174`. В firewall должны быть открыты `22/tcp`, `80/tcp` и `443/tcp`. Порты `13000`, `18080` и `5432` открывать нельзя.
 
 ```bash
-sudo install -d -o deploy -g deploy -m 750 /opt/countryhouse
-sudo install -d -o deploy -g deploy -m 750 /var/backups/countryhouse
+sudo install -d -o user -g user -m 750 /opt/countryhouse
+sudo install -d -o user -g user -m 750 /var/backups/countryhouse
 ```
 
-Скопируйте на VM `compose.prod.yml`, `Caddyfile`, `ops/backup.sh`, `.env.production.example` и создайте секреты:
+Установите virtual host и получите сертификат после появления DNS-записи:
+
+```bash
+sudo install -o root -g root -m 644 ops/nginx-countryhouse.conf /etc/nginx/sites-available/countryhouse.conf
+sudo ln -s /etc/nginx/sites-available/countryhouse.conf /etc/nginx/sites-enabled/countryhouse.conf
+sudo nginx -t
+sudo systemctl reload nginx
+sudo certbot --nginx -d countryhouse.baibakovkir.space
+```
+
+Скопируйте на VM `compose.prod.yml`, `ops/backup.sh`, `.env.production.example` и создайте секреты:
 
 ```bash
 cd /opt/countryhouse
@@ -62,7 +72,7 @@ printf '%s\n' 'IMAGE_TAG=sha-<existing-commit-sha>' > .release.env
 chmod 600 .release.env
 ```
 
-В `.env` укажите lowercase-владельца GitHub, публичный IP и один длинный буквенно-цифровой пароль одновременно в `POSTGRES_PASSWORD` и `DATABASE_URL`. Пример префикса: `ghcr.io/acme/countryhouse`. Для HTTPS задайте `COOKIE_SECURE=true`.
+В `.env` укажите один длинный буквенно-цифровой пароль одновременно в `POSTGRES_PASSWORD` и `DATABASE_URL`. Production origin должен быть `https://countryhouse.baibakovkir.space`, а `COOKIE_SECURE` — `true`.
 
 При первом развёртывании поверх версии без авторизации также задайте `BOOTSTRAP_EMAIL` и `BOOTSTRAP_PASSWORD` (не менее 12 символов). Миграция передаст этому владельцу ранее созданные участки. На чистой базе эти значения не требуются.
 
@@ -79,22 +89,23 @@ cd /opt/countryhouse
 docker compose --env-file .env --env-file .release.env -f compose.prod.yml pull
 docker compose --env-file .env --env-file .release.env -f compose.prod.yml up -d
 docker compose --env-file .env --env-file .release.env -f compose.prod.yml ps
-curl --fail http://<VM_IP>/healthz
+curl --fail http://127.0.0.1:18080/healthz
+curl --fail https://countryhouse.baibakovkir.space/healthz
 ```
 
-`migrate` должен завершиться с кодом `0`. В браузере приложение открывается по `http://<VM_IP>`; прямого доступа к backend и PostgreSQL нет.
+`migrate` должен завершиться с кодом `0`. В браузере приложение открывается по `https://countryhouse.baibakovkir.space`; прямого внешнего доступа к backend, frontend и PostgreSQL нет.
 
 ### 3. Автоматический deploy
 
 В GitHub создайте environment `production` и secrets:
 
 - `VM_HOST` — IP VM;
-- `VM_USER` — `deploy`;
+- `VM_USER` — `user`;
 - `VM_PORT` — SSH-порт, можно оставить пустым для `22`;
 - `VM_SSH_KEY` — приватный deploy-ключ без passphrase.
 - `VM_KNOWN_HOSTS` — заранее проверенная строка host key VM из `ssh-keyscan -H <VM_HOST>`; fingerprint следует отдельно сверить через консоль облачного провайдера.
 
-После push в `main` workflow проверяет код, публикует образы в GHCR, загружает production-конфигурацию на VM, записывает новый SHA в `.release.env`, выполняет `pull/up` и проверяет `/healthz`. Постоянный `.env` через CI не передаётся.
+Pull request запускает проверки и тестовую сборку образов без публикации. После merge/push в `main` workflow публикует образы в GHCR, делает backup работающей БД, разворачивает новый SHA и проверяет локальный и публичный `/healthz`. При ошибке он возвращает предыдущий тег образов. Постоянный `.env` через CI не передаётся; миграции должны оставаться обратно совместимыми.
 
 ### 4. Backup и rollback
 
@@ -104,7 +115,7 @@ curl --fail http://<VM_IP>/healthz
 /opt/countryhouse/backup.sh
 ```
 
-Добавьте ежедневный запуск от пользователя `deploy`, например в `crontab -e`:
+Добавьте ежедневный запуск от пользователя `user`, например в `crontab -e`:
 
 ```cron
 0 3 * * * /opt/countryhouse/backup.sh >> /var/backups/countryhouse/backup.log 2>&1
@@ -122,10 +133,6 @@ docker compose --env-file .env --env-file .release.env -f compose.prod.yml up -d
 ```
 
 Откат образов не откатывает БД, поэтому production-миграции должны оставаться обратно совместимыми.
-
-### 5. Переход на HTTPS
-
-После появления домена направьте DNS A-запись на VM, замените `CADDY_SITE_ADDRESS=http://<IP>` на доменное имя без протокола, обновите `CORS_ALLOWED_ORIGIN=https://<domain>` и откройте `443`. Caddy автоматически запросит и будет обновлять TLS-сертификат.
 
 ## API
 
