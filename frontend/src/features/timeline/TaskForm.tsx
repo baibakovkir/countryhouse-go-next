@@ -1,62 +1,87 @@
 "use client";
 
-import { type FormEvent } from "react";
-import { FieldError } from "@/components/FieldError";
-import type { FieldErrors } from "@/lib/validation";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { Button } from "@/components/ui/Button";
+import { TextAreaField, TextField } from "@/components/ui/FormField";
+import {
+  taskSchema,
+  type TaskFormOutput,
+  type TaskFormValues,
+} from "@/features/timeline/task-input";
+import { applyServerErrors } from "@/lib/forms";
 import type { TimelineTask } from "@/types/domain";
 
 interface TaskFormProps {
   editing: TimelineTask | null;
   loading: boolean;
-  errors: FieldErrors;
-  onSubmit(event: FormEvent<HTMLFormElement>): void;
+  onSave(input: TaskFormOutput): Promise<void>;
   onCancel(): void;
 }
+const defaults = (item: TimelineTask | null): TaskFormValues => ({
+  title: item?.title ?? "",
+  dueDate: item?.dueDate ?? "",
+  plannedBudget: item?.plannedBudget ?? "",
+  description: item?.description ?? "",
+  currency: "RUB",
+});
 
-export function TaskForm({ editing, loading, errors, onSubmit, onCancel }: TaskFormProps) {
+export function TaskForm({ editing, loading, onSave, onCancel }: TaskFormProps) {
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setError,
+    formState: { errors },
+  } = useForm<TaskFormValues, unknown, TaskFormOutput>({
+    resolver: zodResolver(taskSchema),
+    defaultValues: defaults(editing),
+    mode: "onBlur",
+  });
+  useEffect(() => reset(defaults(editing)), [editing, reset]);
+  const submit = handleSubmit(async (input) =>
+    onSave(input)
+      .then(() => {
+        reset(defaults(null));
+        onCancel();
+      })
+      .catch((error) => applyServerErrors(error, setError)),
+  );
   return (
-    <form
-      key={editing?.id ?? "new"}
-      onSubmit={onSubmit}
-      noValidate
-      className="panel h-fit space-y-3"
-    >
-      <h2 className="text-xl font-semibold">{editing ? "Изменить задачу" : "Новая задача"}</h2>
-      <label className="field">
-        Что сделать
-        <input className="input" name="title" defaultValue={editing?.title} />
-        <FieldError message={errors.title} />
-      </label>
-      <label className="field">
-        Срок
-        <input className="input" name="dueDate" type="date" defaultValue={editing?.dueDate} />
-        <FieldError message={errors.dueDate} />
-      </label>
-      <label className="field">
-        Плановый бюджет, ₽
-        <input
-          className="input"
-          name="plannedBudget"
-          inputMode="decimal"
-          defaultValue={editing?.plannedBudget ?? ""}
-        />
-        <FieldError message={errors.plannedBudget} />
-      </label>
-      <label className="field">
-        Описание
-        <textarea
-          className="input min-h-20"
-          name="description"
-          defaultValue={editing?.description}
-        />
-      </label>
-      <button className="button w-full" disabled={loading}>
+    <form onSubmit={submit} noValidate className="panel h-fit space-y-4">
+      <div>
+        <p className="eyebrow">Календарь</p>
+        <h2 className="text-xl font-semibold">{editing ? "Изменить задачу" : "Новая задача"}</h2>
+      </div>
+      <TextField label="Что сделать" error={errors.title?.message} {...register("title")} />
+      <TextField
+        label="Срок"
+        type="date"
+        error={errors.dueDate?.message}
+        {...register("dueDate")}
+      />
+      <TextField
+        label="Плановый бюджет, ₽"
+        inputMode="decimal"
+        error={errors.plannedBudget?.message}
+        {...register("plannedBudget")}
+      />
+      <TextAreaField
+        label="Описание"
+        error={errors.description?.message}
+        {...register("description")}
+      />
+      {errors.root?.server?.message && (
+        <p className="text-sm text-red-700">{errors.root.server.message}</p>
+      )}
+      <Button className="w-full" disabled={loading}>
         {editing ? "Сохранить" : "Добавить"}
-      </button>
+      </Button>
       {editing && (
-        <button type="button" className="input w-full" onClick={onCancel}>
+        <Button className="w-full" type="button" variant="secondary" onClick={onCancel}>
           Отмена
-        </button>
+        </Button>
       )}
     </form>
   );

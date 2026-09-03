@@ -1,86 +1,203 @@
 "use client";
 
-import { type FormEvent } from "react";
-import { FieldError } from "@/components/FieldError";
-import type { FieldErrors } from "@/lib/validation";
-import type { PlotObject } from "@/types/domain";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect } from "react";
+import { Controller, type FieldErrors, type UseFormRegister, useForm } from "react-hook-form";
+import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { TextField } from "@/components/ui/FormField";
+import { SelectField } from "@/components/ui/SelectField";
+import {
+  createObjectSchema,
+  type ObjectFormOutput,
+  type ObjectFormValues,
+} from "@/features/plot/object-input";
+import { applyServerErrors } from "@/lib/forms";
+import type { Plot, PlotObject } from "@/types/domain";
 
 interface PlotObjectFormProps {
+  plot: Plot;
   current: PlotObject | null;
   loading: boolean;
-  errors: FieldErrors;
-  onSubmit(event: FormEvent<HTMLFormElement>): void;
+  onSave(input: ObjectFormOutput): Promise<void>;
   onCreateNew(): void;
-  onDelete(object: PlotObject): void;
+  onDelete(object: PlotObject): Promise<void>;
 }
 
-const geometryFields = [
-  ["x", "X"],
-  ["y", "Y"],
-  ["width", "Ширина"],
-  ["length", "Длина"],
-] as const;
+const types = [
+  { value: "building", label: "Строение" },
+  { value: "garden_bed", label: "Грядка" },
+  { value: "tree", label: "Дерево" },
+];
 
-export function PlotObjectForm(props: PlotObjectFormProps) {
-  const { current, loading, errors, onSubmit, onCreateNew, onDelete } = props;
+function defaults(object: PlotObject | null): ObjectFormValues {
+  if (!object)
+    return {
+      type: "building",
+      name: "",
+      x: "0",
+      y: "0",
+      width: "1",
+      length: "1",
+      height: "0",
+      z: 0,
+    };
+  return {
+    type: object.type,
+    name: object.name,
+    x: String(object.x),
+    y: String(object.y),
+    width: String(object.width),
+    length: String(object.length),
+    height: String(object.height),
+    z: 0,
+  };
+}
+
+export function PlotObjectForm({
+  plot,
+  current,
+  loading,
+  onSave,
+  onCreateNew,
+  onDelete,
+}: PlotObjectFormProps) {
+  const {
+    register,
+    control,
+    handleSubmit,
+    reset,
+    setError,
+    formState: { errors },
+  } = useForm<ObjectFormValues, unknown, ObjectFormOutput>({
+    resolver: zodResolver(createObjectSchema(plot)),
+    defaultValues: defaults(current),
+    mode: "onBlur",
+  });
+
+  useEffect(() => reset(defaults(current)), [current, reset]);
+
+  const submit = handleSubmit(async (input) => {
+    await onSave(input)
+      .then(() => {
+        reset(defaults(null));
+        onCreateNew();
+      })
+      .catch((error) => applyServerErrors(error, setError));
+  });
+
   return (
-    <form
-      key={current?.id ?? "new"}
-      onSubmit={onSubmit}
-      noValidate
-      className="panel h-fit space-y-3"
-    >
-      <h2 className="text-xl font-semibold">{current ? "Изменить объект" : "Добавить объект"}</h2>
-      <label className="field">
-        Тип
-        <select className="input" name="type" defaultValue={current?.type ?? "building"}>
-          <option value="building">Строение</option>
-          <option value="garden_bed">Грядка</option>
-          <option value="tree">Дерево</option>
-        </select>
-      </label>
-      <label className="field">
-        Название
-        <input className="input" name="name" defaultValue={current?.name} />
-        <FieldError message={errors.name} />
-      </label>
+    <form onSubmit={submit} noValidate className="panel h-fit space-y-4">
+      <ObjectFormHeader editing={Boolean(current)} />
+      <Controller
+        name="type"
+        control={control}
+        render={({ field }) => (
+          <SelectField
+            label="Тип"
+            value={field.value}
+            options={types}
+            onChange={field.onChange}
+            error={fieldError(errors, "type")}
+          />
+        )}
+      />
+      <TextField label="Название" error={fieldError(errors, "name")} {...register("name")} />
+      <GeometryFields register={register} errors={errors} />
+      {errors.root?.server?.message && (
+        <p className="text-sm text-red-700">{errors.root.server.message}</p>
+      )}
+      <ObjectFormActions
+        current={current}
+        loading={loading}
+        onCreateNew={onCreateNew}
+        onDelete={onDelete}
+      />
+    </form>
+  );
+}
+
+function fieldError(errors: FieldErrors<ObjectFormValues>, field: keyof ObjectFormValues) {
+  return errors[field]?.message;
+}
+
+function ObjectFormHeader({ editing }: { editing: boolean }) {
+  return (
+    <div>
+      <p className="eyebrow">Объект</p>
+      <h2 className="text-xl font-semibold">{editing ? "Редактирование" : "Новый объект"}</h2>
+    </div>
+  );
+}
+
+function GeometryFields({
+  register,
+  errors,
+}: {
+  register: UseFormRegister<ObjectFormValues>;
+  errors: FieldErrors<ObjectFormValues>;
+}) {
+  return (
+    <>
       <div className="grid grid-cols-2 gap-3">
-        {geometryFields.map(([name, label]) => (
-          <label className="field" key={name}>
-            {label}
-            <input
-              className="input"
-              name={name}
-              inputMode="decimal"
-              defaultValue={current?.[name]}
-            />
-            <FieldError message={errors[name]} />
-          </label>
-        ))}
-      </div>
-      <label className="field">
-        Высота, м
-        <input
-          className="input"
-          name="height"
+        <TextField
+          label="X"
           inputMode="decimal"
-          defaultValue={current?.height ?? 0}
+          error={fieldError(errors, "x")}
+          {...register("x")}
         />
-        <FieldError message={errors.height} />
-      </label>
-      <button className="button w-full" disabled={loading}>
+        <TextField
+          label="Y"
+          inputMode="decimal"
+          error={fieldError(errors, "y")}
+          {...register("y")}
+        />
+        <TextField
+          label="Ширина"
+          inputMode="decimal"
+          error={fieldError(errors, "width")}
+          {...register("width")}
+        />
+        <TextField
+          label="Длина"
+          inputMode="decimal"
+          error={fieldError(errors, "length")}
+          {...register("length")}
+        />
+      </div>
+      <TextField
+        label="Высота, м"
+        inputMode="decimal"
+        error={fieldError(errors, "height")}
+        {...register("height")}
+      />
+    </>
+  );
+}
+
+function ObjectFormActions({
+  current,
+  loading,
+  onCreateNew,
+  onDelete,
+}: Pick<PlotObjectFormProps, "current" | "loading" | "onCreateNew" | "onDelete">) {
+  return (
+    <>
+      <Button className="w-full" disabled={loading}>
         {current ? "Сохранить" : "Добавить"}
-      </button>
+      </Button>
       {current && (
-        <div className="flex gap-2">
-          <button type="button" className="input flex-1" onClick={onCreateNew}>
+        <div className="grid grid-cols-2 gap-2">
+          <Button type="button" variant="secondary" onClick={onCreateNew}>
             Новый объект
-          </button>
-          <button type="button" className="input text-red-700" onClick={() => onDelete(current)}>
-            Удалить
-          </button>
+          </Button>
+          <ConfirmDialog
+            title="Удалить объект?"
+            description={`«${current.name}» будет удалён без возможности восстановления.`}
+            onConfirm={() => void onDelete(current)}
+          />
         </div>
       )}
-    </form>
+    </>
   );
 }

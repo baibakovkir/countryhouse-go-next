@@ -1,24 +1,18 @@
-import { collect, date, money, required, type FieldErrors } from "@/lib/validation";
-import type { CreateExpense } from "@/types/domain";
+import { z } from "zod";
 
-export function readExpenseInput(form: HTMLFormElement): CreateExpense {
-  const data = new FormData(form);
-  const plotObjectId = String(data.get("plotObjectId"));
-  return {
-    plotObjectId: plotObjectId || null,
-    category: String(data.get("category")).trim(),
-    amount: String(data.get("amount")),
-    currency: "RUB",
-    date: String(data.get("date")),
-    description: String(data.get("description")).trim(),
-  };
-}
+const moneyPattern = /^(0|[1-9][0-9]{0,11})(\.[0-9]{1,2})?$/;
 
-export function validateExpenseInput(form: HTMLFormElement): FieldErrors {
-  const data = new FormData(form);
-  return collect([
-    ["category", required(String(data.get("category")), "Категория")],
-    ["amount", money(String(data.get("amount")))],
-    ["date", date(String(data.get("date")))],
-  ]);
-}
+export const expenseSchema = z.object({
+  category: z.string().trim().min(1, "Категория обязательна"),
+  amount: z
+    .string()
+    .regex(moneyPattern, "Введите сумму больше 0 с точностью до копеек")
+    .refine((value) => Number(value) > 0, "Введите сумму больше 0 с точностью до копеек"),
+  date: z.iso.date("Введите корректную дату"),
+  plotObjectId: z.string().transform((value) => value || null),
+  description: z.string().trim(),
+  currency: z.literal("RUB").default("RUB"),
+});
+
+export type ExpenseFormValues = z.input<typeof expenseSchema>;
+export type ExpenseFormOutput = z.output<typeof expenseSchema>;

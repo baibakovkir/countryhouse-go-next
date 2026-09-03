@@ -1,4 +1,6 @@
 import type { Expense } from "@/types/domain";
+import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 interface ExpenseHistoryProps {
   expenses: Expense[];
@@ -41,12 +43,19 @@ function ExpenseRow({
           {item.description ? ` · ${item.description}` : ""}
         </p>
         <div className="mt-2 flex gap-2">
-          <button className="text-sm text-emerald-700 underline" onClick={() => onEdit(item)}>
+          <Button
+            type="button"
+            variant="ghost"
+            className="min-h-8 px-2 py-1"
+            onClick={() => onEdit(item)}
+          >
             Изменить
-          </button>
-          <button className="text-sm text-red-700 underline" onClick={() => onDelete(item)}>
-            Удалить
-          </button>
+          </Button>
+          <ConfirmDialog
+            title="Удалить расход?"
+            description={`Расход «${item.category}» будет удалён.`}
+            onConfirm={() => onDelete(item)}
+          />
         </div>
       </div>
       <strong>

@@ -14,7 +14,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <AuthBootstrap>
           <AppNav />
-          <main className="mx-auto max-w-7xl p-5">{children}</main>
+          <main className="mx-auto max-w-7xl px-5 py-8">{children}</main>
         </AuthBootstrap>
       </body>
     </html>

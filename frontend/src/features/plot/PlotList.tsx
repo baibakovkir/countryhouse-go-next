@@ -1,10 +1,14 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
-import { type FormEvent, useState } from "react";
-import { readPlotInput, validatePlotInput } from "@/features/plot/plot-input";
-import { errorDetails } from "@/lib/api";
-import type { FieldErrors } from "@/lib/validation";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { TextField } from "@/components/ui/FormField";
+import { plotSchema, type PlotFormOutput, type PlotFormValues } from "@/features/plot/plot-input";
+import { applyServerErrors } from "@/lib/forms";
 import type { Plot, UpdatePlot } from "@/types/domain";
 
 interface PlotListProps {
@@ -16,24 +20,6 @@ interface PlotListProps {
 
 export function PlotList({ plots, loading, onUpdate, onDelete }: PlotListProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [errors, setErrors] = useState<FieldErrors>({});
-
-  async function save(event: FormEvent<HTMLFormElement>, id: string) {
-    event.preventDefault();
-    const next = validatePlotInput(event.currentTarget);
-    setErrors(next);
-    if (Object.keys(next).length > 0) return;
-
-    await onUpdate(id, readPlotInput(event.currentTarget))
-      .then(() => setEditingId(null))
-      .catch((error) => setErrors(errorDetails(error)));
-  }
-
-  async function remove(plot: Plot) {
-    if (!confirm(`Удалить участок «${plot.name}» и все связанные данные?`)) return;
-    await onDelete(plot.id).catch(() => undefined);
-  }
-
   return (
     <>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -42,8 +28,8 @@ export function PlotList({ plots, loading, onUpdate, onDelete }: PlotListProps) 
             <PlotEditCard
               key={plot.id}
               plot={plot}
-              errors={errors}
-              onSave={save}
+              loading={loading}
+              onSave={(input) => onUpdate(plot.id, input)}
               onCancel={() => setEditingId(null)}
             />
           ) : (
@@ -51,7 +37,7 @@ export function PlotList({ plots, loading, onUpdate, onDelete }: PlotListProps) 
               key={plot.id}
               plot={plot}
               onEdit={() => setEditingId(plot.id)}
-              onDelete={() => void remove(plot)}
+              onDelete={() => void onDelete(plot.id)}
             />
           ),
         )}
@@ -63,21 +49,24 @@ export function PlotList({ plots, loading, onUpdate, onDelete }: PlotListProps) 
 
 function PlotCard({ plot, onEdit, onDelete }: { plot: Plot; onEdit(): void; onDelete(): void }) {
   return (
-    <article className="panel">
-      <h2 className="text-xl font-semibold">{plot.name}</h2>
+    <article className="panel group">
+      <p className="eyebrow">Участок</p>
+      <h2 className="mt-1 text-xl font-semibold">{plot.name}</h2>
       <p className="mt-1 text-slate-500">
         {plot.width} × {plot.length} м
       </p>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Link className="button" href={`/plots/${plot.id}/plan`}>
+      <div className="mt-5 flex flex-wrap gap-2">
+        <Link className="ui-link-button" href={`/plots/${plot.id}/plan`}>
           Открыть
         </Link>
-        <button className="input" onClick={onEdit}>
+        <Button type="button" variant="secondary" onClick={onEdit}>
           Изменить
-        </button>
-        <button className="input text-red-700" onClick={onDelete}>
-          Удалить
-        </button>
+        </Button>
+        <ConfirmDialog
+          title="Удалить участок?"
+          description={`«${plot.name}» и все связанные данные будут удалены.`}
+          onConfirm={onDelete}
+        />
       </div>
     </article>
   );
@@ -85,32 +74,42 @@ function PlotCard({ plot, onEdit, onDelete }: { plot: Plot; onEdit(): void; onDe
 
 function PlotEditCard({
   plot,
-  errors,
+  loading,
   onSave,
   onCancel,
 }: {
   plot: Plot;
-  errors: FieldErrors;
-  onSave(event: FormEvent<HTMLFormElement>, id: string): void;
+  loading: boolean;
+  onSave(input: PlotFormOutput): Promise<void>;
   onCancel(): void;
 }) {
+  const {
+    register,
+    handleSubmit,
+    setError,
+    formState: { errors },
+  } = useForm<PlotFormValues, unknown, PlotFormOutput>({
+    resolver: zodResolver(plotSchema),
+    defaultValues: { name: plot.name, width: String(plot.width), length: String(plot.length) },
+    mode: "onBlur",
+  });
+  const submit = handleSubmit(async (input) =>
+    onSave(input)
+      .then(onCancel)
+      .catch((error) => applyServerErrors(error, setError)),
+  );
   return (
-    <form onSubmit={(event) => onSave(event, plot.id)} className="panel space-y-3">
-      <input
-        className="input w-full"
-        name="name"
-        defaultValue={plot.name}
-        aria-invalid={Boolean(errors.name)}
-      />
+    <form onSubmit={submit} className="panel space-y-3" noValidate>
+      <TextField label="Название" error={errors.name?.message} {...register("name")} />
       <div className="grid grid-cols-2 gap-2">
-        <input className="input" name="width" defaultValue={plot.width} />
-        <input className="input" name="length" defaultValue={plot.length} />
+        <TextField label="Ширина, м" error={errors.width?.message} {...register("width")} />
+        <TextField label="Длина, м" error={errors.length?.message} {...register("length")} />
       </div>
       <div className="flex gap-2">
-        <button className="button">Сохранить</button>
-        <button type="button" className="input" onClick={onCancel}>
+        <Button disabled={loading}>Сохранить</Button>
+        <Button type="button" variant="secondary" onClick={onCancel}>
           Отмена
-        </button>
+        </Button>
       </div>
     </form>
   );
