@@ -15,3 +15,17 @@ func TestValidateObjectBounds(t *testing.T) {
 		t.Fatal("out-of-bounds object accepted")
 	}
 }
+
+func TestValidateObjectSupportsVerticalAndLinearElements(t *testing.T) {
+	t.Parallel()
+	p := Plot{Width: 10, Length: 20}
+	utility := Object{Type: Utility, Name: "Вода", Geometry: Polyline, X: 0, Y: 0, Z: -2, Width: 0.1, Length: 1, Points: []Point{{X: 1, Y: 1, Z: -2}, {X: 8, Y: 12, Z: -2}}}
+	if err := ValidateObject(p, utility); err != nil {
+		t.Fatalf("underground utility rejected: %v", err)
+	}
+	invalid := utility
+	invalid.Points = []Point{{X: 1, Y: 1, Z: 0}}
+	if err := ValidateObject(p, invalid); err == nil {
+		t.Fatal("single-point polyline accepted")
+	}
+}

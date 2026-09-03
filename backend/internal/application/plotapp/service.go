@@ -69,6 +69,12 @@ func (s *Service) AddObject(ctx context.Context, ownerID, plotID string, object 
 	}
 	object.PlotID = current.ID
 	object.Name = strings.TrimSpace(object.Name)
+	if object.Geometry == "" {
+		object.Geometry = plot.Footprint
+	}
+	if len(object.Properties) == 0 {
+		object.Properties = []byte(`{}`)
+	}
 	if err := plot.ValidateObject(current, object); err != nil {
 		return plot.Object{}, err
 	}
@@ -98,6 +104,9 @@ func (s *Service) UpdateObject(ctx context.Context, ownerID, plotID, objectID st
 	}
 	mutate(&object)
 	object.Name = strings.TrimSpace(object.Name)
+	if object.Geometry == "" {
+		object.Geometry = plot.Footprint
+	}
 	if err := plot.ValidateObject(current, object); err != nil {
 		return plot.Object{}, err
 	}

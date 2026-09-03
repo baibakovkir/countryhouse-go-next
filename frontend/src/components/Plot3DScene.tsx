@@ -11,10 +11,14 @@ interface Plot3DSceneProps {
   onSelect(id: string): void;
 }
 
-const colors: Record<PlotObject["type"], string> = {
+const colors: Partial<Record<PlotObject["type"], string>> = {
   building: "#64748b",
   garden_bed: "#a16207",
   tree: "#15803d",
+  terrace: "#b45309",
+  stairs: "#475569",
+  utility: "#0f766e",
+  custom: "#7c3aed",
 };
 
 export function Plot3DScene({ plot, selectedObjectId, onSelect }: Plot3DSceneProps) {
@@ -112,7 +116,7 @@ function SceneObject({
       <mesh castShadow receiveShadow>
         <boxGeometry args={[object.width, renderedHeight, object.length]} />
         <meshStandardMaterial
-          color={selected ? "#10b981" : colors[object.type]}
+          color={selected ? "#10b981" : (colors[object.type] ?? "#64748b")}
           emissive={selected ? "#064e3b" : "#000000"}
         />
       </mesh>

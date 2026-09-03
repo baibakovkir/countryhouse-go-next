@@ -243,29 +243,36 @@ func (s *Server) deletePlot(w http.ResponseWriter, r *http.Request) {
 }
 
 type objectInput struct {
-	Type   plot.ObjectType `json:"type"`
-	Name   string          `json:"name"`
-	X      float64         `json:"x"`
-	Y      float64         `json:"y"`
-	Z      float64         `json:"z"`
-	Width  float64         `json:"width"`
-	Length float64         `json:"length"`
-	Height float64         `json:"height"`
+	Type       plot.ObjectType   `json:"type"`
+	Name       string            `json:"name"`
+	X          float64           `json:"x"`
+	Y          float64           `json:"y"`
+	Z          float64           `json:"z"`
+	Width      float64           `json:"width"`
+	Length     float64           `json:"length"`
+	Height     float64           `json:"height"`
+	Geometry   plot.GeometryType `json:"geometry"`
+	Points     []plot.Point      `json:"points"`
+	Properties map[string]any    `json:"properties"`
 }
 
 func (i objectInput) value() plot.Object {
-	return plot.Object{Type: i.Type, Name: i.Name, X: i.X, Y: i.Y, Z: i.Z, Width: i.Width, Length: i.Length, Height: i.Height}
+	properties, _ := json.Marshal(i.Properties)
+	return plot.Object{Type: i.Type, Name: i.Name, X: i.X, Y: i.Y, Z: i.Z, Width: i.Width, Length: i.Length, Height: i.Height, Geometry: i.Geometry, Points: i.Points, Properties: properties}
 }
 
 type updateObjectRequest struct {
-	Type   *plot.ObjectType `json:"type"`
-	Name   *string          `json:"name"`
-	X      *float64         `json:"x"`
-	Y      *float64         `json:"y"`
-	Z      *float64         `json:"z"`
-	Width  *float64         `json:"width"`
-	Length *float64         `json:"length"`
-	Height *float64         `json:"height"`
+	Type       *plot.ObjectType   `json:"type"`
+	Name       *string            `json:"name"`
+	X          *float64           `json:"x"`
+	Y          *float64           `json:"y"`
+	Z          *float64           `json:"z"`
+	Width      *float64           `json:"width"`
+	Length     *float64           `json:"length"`
+	Height     *float64           `json:"height"`
+	Geometry   *plot.GeometryType `json:"geometry"`
+	Points     *[]plot.Point      `json:"points"`
+	Properties *json.RawMessage   `json:"properties"`
 }
 
 func (s *Server) listObjects(w http.ResponseWriter, r *http.Request) {
@@ -329,6 +336,15 @@ func (s *Server) updateObject(w http.ResponseWriter, r *http.Request) {
 		}
 		if in.Height != nil {
 			o.Height = *in.Height
+		}
+		if in.Geometry != nil {
+			o.Geometry = *in.Geometry
+		}
+		if in.Points != nil {
+			o.Points = *in.Points
+		}
+		if in.Properties != nil {
+			o.Properties = *in.Properties
 		}
 	})
 	if err != nil {
