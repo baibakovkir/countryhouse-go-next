@@ -1,14 +1,12 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { useState } from "react";
 import { useParams } from "next/navigation";
 import { PlotPageHeader } from "@/components/PlotPageHeader";
 import { StatusMessage } from "@/components/StatusMessage";
 import { ExpenseForm } from "@/features/expenses/ExpenseForm";
 import { ExpenseHistory } from "@/features/expenses/ExpenseHistory";
-import { readExpenseInput, validateExpenseInput } from "@/features/expenses/expense-input";
-import { errorDetails } from "@/lib/api";
-import type { FieldErrors } from "@/lib/validation";
+import type { ExpenseFormOutput } from "@/features/expenses/expense-input";
 import { usePlotPage } from "@/features/plot/use-plot-page";
 import { useDataStore } from "@/stores/data-store";
 import type { Expense } from "@/types/domain";
@@ -18,27 +16,14 @@ export default function ExpensesPage() {
   const store = useDataStore();
   const status = usePlotPage(plotId, store.loadPlot, store.loadExpenses);
   const [editing, setEditing] = useState<Expense | null>(null);
-  const [errors, setErrors] = useState<FieldErrors>({});
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const next = validateExpenseInput(form);
-    setErrors(next);
-    if (Object.keys(next).length > 0) return;
+  async function save(input: ExpenseFormOutput) {
     const request = editing
-      ? store.updateExpense(plotId, editing.id, readExpenseInput(form))
-      : store.createExpense(plotId, readExpenseInput(form));
-    await request
-      .then(() => {
-        form.reset();
-        setEditing(null);
-      })
-      .catch((error) => setErrors(errorDetails(error)));
+      ? store.updateExpense(plotId, editing.id, input)
+      : store.createExpense(plotId, input);
+    await request;
   }
 
   async function remove(item: Expense) {
-    if (!confirm(`Удалить расход «${item.category}»?`)) return;
     await store
       .deleteExpense(plotId, item.id)
       .then(() => setEditing(null))
@@ -60,8 +45,7 @@ export default function ExpensesPage() {
           editing={editing}
           objects={store.plot.objects}
           loading={store.loading}
-          errors={errors}
-          onSubmit={submit}
+          onSave={save}
           onCancel={() => setEditing(null)}
         />
         <ExpenseHistory

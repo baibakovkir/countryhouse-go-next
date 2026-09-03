@@ -1,4 +1,6 @@
 import type { TimelineTask } from "@/types/domain";
+import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 interface TaskListProps {
   tasks: TimelineTask[];
@@ -48,12 +50,19 @@ function TaskRow({
         </p>
       )}
       <div className="mt-3 flex gap-2">
-        <button className="text-sm text-emerald-700 underline" onClick={() => onEdit(task)}>
+        <Button
+          type="button"
+          variant="ghost"
+          className="min-h-8 px-2 py-1"
+          onClick={() => onEdit(task)}
+        >
           Изменить
-        </button>
-        <button className="text-sm text-red-700 underline" onClick={() => onDelete(task)}>
-          Удалить
-        </button>
+        </Button>
+        <ConfirmDialog
+          title="Удалить задачу?"
+          description={`Задача «${task.title}» будет удалена.`}
+          onConfirm={() => onDelete(task)}
+        />
       </div>
     </li>
   );

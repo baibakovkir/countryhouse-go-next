@@ -1,20 +1,21 @@
-import { collect, positive, required, type FieldErrors } from "@/lib/validation";
-import type { CreatePlot } from "@/types/domain";
+import { z } from "zod";
 
-export function readPlotInput(form: HTMLFormElement): CreatePlot {
-  const data = new FormData(form);
-  return {
-    name: String(data.get("name")).trim(),
-    width: Number(data.get("width")),
-    length: Number(data.get("length")),
-  };
-}
+const positiveNumber = (label: string) =>
+  z
+    .string()
+    .trim()
+    .min(1, `${label} обязательно`)
+    .refine(
+      (value) => Number.isFinite(Number(value)) && Number(value) > 0,
+      `${label} должно быть больше нуля`,
+    )
+    .transform(Number);
 
-export function validatePlotInput(form: HTMLFormElement): FieldErrors {
-  const data = new FormData(form);
-  return collect([
-    ["name", required(String(data.get("name")), "Название")],
-    ["width", positive(String(data.get("width")), "Ширина")],
-    ["length", positive(String(data.get("length")), "Длина")],
-  ]);
-}
+export const plotSchema = z.object({
+  name: z.string().trim().min(1, "Название обязательно"),
+  width: positiveNumber("Ширина"),
+  length: positiveNumber("Длина"),
+});
+
+export type PlotFormValues = z.input<typeof plotSchema>;
+export type PlotFormOutput = z.output<typeof plotSchema>;

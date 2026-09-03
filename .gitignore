@@ -6,5 +6,6 @@ backend/bin/
 backend/coverage.out
 frontend/node_modules/
 frontend/.next/
+frontend/tsconfig.tsbuildinfo
 postgres_data/
 backups/

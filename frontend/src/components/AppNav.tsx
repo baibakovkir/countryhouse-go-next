@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth-store";
 import { useDataStore } from "@/stores/data-store";
+import { Button } from "@/components/ui/Button";
 export function AppNav() {
   const router = useRouter();
   const { user, status, logout } = useAuthStore();
@@ -13,7 +14,7 @@ export function AppNav() {
     router.replace("/login");
   }
   return (
-    <header className="border-b border-slate-200 bg-white">
+    <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-5 py-4">
         <Link href={user ? "/plots" : "/login"} className="text-lg font-bold">
           Планировщик участка
@@ -24,9 +25,9 @@ export function AppNav() {
               Участки
             </Link>
             <span className="hidden text-slate-500 sm:inline">{user?.email}</span>
-            <button className="nav-link" onClick={() => void signOut()}>
+            <Button type="button" variant="ghost" onClick={() => void signOut()}>
               Выйти
-            </button>
+            </Button>
           </div>
         )}
       </div>

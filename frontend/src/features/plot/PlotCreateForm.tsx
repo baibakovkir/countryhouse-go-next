@@ -1,10 +1,11 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
-import { FieldError } from "@/components/FieldError";
-import { readPlotInput, validatePlotInput } from "@/features/plot/plot-input";
-import { errorDetails } from "@/lib/api";
-import type { FieldErrors } from "@/lib/validation";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { Button } from "@/components/ui/Button";
+import { TextField } from "@/components/ui/FormField";
+import { plotSchema, type PlotFormOutput, type PlotFormValues } from "@/features/plot/plot-input";
+import { applyServerErrors } from "@/lib/forms";
 import type { CreatePlot, Plot } from "@/types/domain";
 
 interface PlotCreateFormProps {
@@ -14,63 +15,49 @@ interface PlotCreateFormProps {
 }
 
 export function PlotCreateForm({ loading, onCreate, onCreated }: PlotCreateFormProps) {
-  const [errors, setErrors] = useState<FieldErrors>({});
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setError,
+    formState: { errors },
+  } = useForm<PlotFormValues, unknown, PlotFormOutput>({
+    resolver: zodResolver(plotSchema),
+    defaultValues: { name: "", width: "", length: "" },
+    mode: "onBlur",
+  });
 
-  function validate(form: HTMLFormElement) {
-    const next = validatePlotInput(form);
-    setErrors(next);
-    return Object.keys(next).length === 0;
-  }
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!validate(event.currentTarget)) return;
-
-    await onCreate(readPlotInput(event.currentTarget))
-      .then(onCreated)
-      .catch((error) => setErrors(errorDetails(error)));
-  }
+  const submit = handleSubmit(async (input) => {
+    await onCreate(input)
+      .then((plot) => {
+        reset();
+        onCreated(plot);
+      })
+      .catch((error) => applyServerErrors(error, setError));
+  });
 
   return (
     <form
-      className="panel grid gap-3 md:grid-cols-[1fr_160px_160px_auto]"
+      className="panel grid gap-4 md:grid-cols-[1fr_160px_160px_auto]"
       noValidate
-      onBlur={(event) => {
-        if (event.target instanceof HTMLInputElement) validate(event.currentTarget);
-      }}
       onSubmit={submit}
     >
-      <PlotField label="Название" name="name" error={errors.name} />
-      <PlotField label="Ширина, м" name="width" error={errors.width} decimal />
-      <PlotField label="Длина, м" name="length" error={errors.length} decimal />
-      <button className="button self-end" disabled={loading}>
-        Создать
-      </button>
-    </form>
-  );
-}
-
-function PlotField({
-  label,
-  name,
-  error,
-  decimal = false,
-}: {
-  label: string;
-  name: string;
-  error?: string;
-  decimal?: boolean;
-}) {
-  return (
-    <label className="field">
-      {label}
-      <input
-        className="input"
-        name={name}
-        inputMode={decimal ? "decimal" : undefined}
-        aria-invalid={Boolean(error)}
+      <TextField label="Название" error={errors.name?.message} {...register("name")} />
+      <TextField
+        label="Ширина, м"
+        inputMode="decimal"
+        error={errors.width?.message}
+        {...register("width")}
       />
-      <FieldError message={error} />
-    </label>
+      <TextField
+        label="Длина, м"
+        inputMode="decimal"
+        error={errors.length?.message}
+        {...register("length")}
+      />
+      <Button className="self-end" disabled={loading}>
+        Создать
+      </Button>
+    </form>
   );
 }
