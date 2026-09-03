@@ -1,4 +1,11 @@
-export type PlotObjectType = "building" | "garden_bed" | "tree";
+export type PlotObjectType =
+  "building" | "garden_bed" | "tree" | "terrace" | "stairs" | "utility" | "custom";
+export type PlotObjectGeometry = "footprint" | "polyline" | "polygon";
+export interface PlotPoint {
+  x: number;
+  y: number;
+  z: number;
+}
 
 export interface User {
   id: string;
@@ -15,6 +22,9 @@ export interface PlotObject {
   width: number;
   length: number;
   height: number;
+  geometry: PlotObjectGeometry;
+  points: PlotPoint[];
+  properties: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 }

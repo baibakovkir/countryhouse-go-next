@@ -28,29 +28,44 @@ const types = [
   { value: "building", label: "Строение" },
   { value: "garden_bed", label: "Грядка" },
   { value: "tree", label: "Дерево" },
+  { value: "terrace", label: "Терраса" },
+  { value: "stairs", label: "Ступени" },
+  { value: "utility", label: "Коммуникация" },
+  { value: "custom", label: "Свой элемент" },
+];
+const geometries = [
+  { value: "footprint", label: "Площадь" },
+  { value: "polyline", label: "Трасса" },
+  { value: "polygon", label: "Полигон" },
 ];
 
 function defaults(object: PlotObject | null): ObjectFormValues {
   if (!object)
     return {
       type: "building",
+      geometry: "footprint",
       name: "",
       x: "0",
       y: "0",
       width: "1",
       length: "1",
       height: "0",
-      z: 0,
+      z: "0",
+      points: "[]",
+      properties: "{}",
     };
   return {
     type: object.type,
+    geometry: object.geometry ?? "footprint",
     name: object.name,
     x: String(object.x),
     y: String(object.y),
     width: String(object.width),
     length: String(object.length),
     height: String(object.height),
-    z: 0,
+    z: String(object.z),
+    points: JSON.stringify(object.points ?? []),
+    properties: JSON.stringify(object.properties ?? {}),
   };
 }
 
@@ -95,10 +110,23 @@ export function PlotObjectForm({
         render={({ field }) => (
           <SelectField
             label="Тип"
-            value={field.value}
+            value={field.value ?? "building"}
             options={types}
             onChange={field.onChange}
             error={fieldError(errors, "type")}
+          />
+        )}
+      />
+      <Controller
+        name="geometry"
+        control={control}
+        render={({ field }) => (
+          <SelectField
+            label="Геометрия"
+            value={field.value ?? "footprint"}
+            options={geometries}
+            onChange={field.onChange}
+            error={fieldError(errors, "geometry")}
           />
         )}
       />
@@ -170,6 +198,22 @@ function GeometryFields({
         inputMode="decimal"
         error={fieldError(errors, "height")}
         {...register("height")}
+      />
+      <TextField
+        label="Z / отметка, м"
+        inputMode="decimal"
+        error={fieldError(errors, "z")}
+        {...register("z")}
+      />
+      <TextField
+        label="Точки JSON (для трасс/полигонов)"
+        error={fieldError(errors, "points")}
+        {...register("points")}
+      />
+      <TextField
+        label="Свойства JSON"
+        error={fieldError(errors, "properties")}
+        {...register("properties")}
       />
     </>
   );

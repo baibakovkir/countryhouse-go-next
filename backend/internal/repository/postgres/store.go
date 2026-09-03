@@ -155,15 +155,15 @@ func (s *Store) Delete(ctx context.Context, ownerID, plotID string) error {
 	return deleted(command, "plot not found")
 }
 
-const objectColumns = `o.id,o.plot_id,o.type,o.name,o.x,o.y,o.z,o.width,o.length,o.height,o.created_at,o.updated_at`
+const objectColumns = `o.id,o.plot_id,o.type,o.name,o.x,o.y,o.z,o.width,o.length,o.height,o.geometry,o.points,o.properties,o.created_at,o.updated_at`
 
 func scanObject(row pgx.Row) (plot.Object, error) {
 	var o plot.Object
-	err := row.Scan(&o.ID, &o.PlotID, &o.Type, &o.Name, &o.X, &o.Y, &o.Z, &o.Width, &o.Length, &o.Height, &o.CreatedAt, &o.UpdatedAt)
+	err := row.Scan(&o.ID, &o.PlotID, &o.Type, &o.Name, &o.X, &o.Y, &o.Z, &o.Width, &o.Length, &o.Height, &o.Geometry, &o.Points, &o.Properties, &o.CreatedAt, &o.UpdatedAt)
 	return o, err
 }
 func (s *Store) AddObject(ctx context.Context, ownerID string, o plot.Object) (plot.Object, error) {
-	err := s.pool.QueryRow(ctx, `INSERT INTO plot_objects(plot_id,type,name,x,y,z,width,length,height) SELECT p.id,$1,$2,$3,$4,$5,$6,$7,$8 FROM plots p WHERE p.id=$9 AND p.owner_id=$10 RETURNING id,created_at,updated_at`, o.Type, o.Name, o.X, o.Y, o.Z, o.Width, o.Length, o.Height, o.PlotID, ownerID).Scan(&o.ID, &o.CreatedAt, &o.UpdatedAt)
+	err := s.pool.QueryRow(ctx, `INSERT INTO plot_objects(plot_id,type,name,x,y,z,width,length,height,geometry,points,properties) SELECT p.id,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11 FROM plots p WHERE p.id=$12 AND p.owner_id=$13 RETURNING id,created_at,updated_at`, o.Type, o.Name, o.X, o.Y, o.Z, o.Width, o.Length, o.Height, o.Geometry, o.Points, o.Properties, o.PlotID, ownerID).Scan(&o.ID, &o.CreatedAt, &o.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return plot.Object{}, domainerr.New(domainerr.NotFound, "plot not found")
 	}
@@ -181,7 +181,7 @@ func (s *Store) ListObjects(ctx context.Context, ownerID, plotID string) ([]plot
 	items := []plot.Object{}
 	for rows.Next() {
 		var o plot.Object
-		if err := rows.Scan(&o.ID, &o.PlotID, &o.Type, &o.Name, &o.X, &o.Y, &o.Z, &o.Width, &o.Length, &o.Height, &o.CreatedAt, &o.UpdatedAt); err != nil {
+		if err := rows.Scan(&o.ID, &o.PlotID, &o.Type, &o.Name, &o.X, &o.Y, &o.Z, &o.Width, &o.Length, &o.Height, &o.Geometry, &o.Points, &o.Properties, &o.CreatedAt, &o.UpdatedAt); err != nil {
 			return nil, internal("could not scan plot object", err)
 		}
 		items = append(items, o)
@@ -199,7 +199,7 @@ func (s *Store) GetObject(ctx context.Context, ownerID, plotID, objectID string)
 	return o, nil
 }
 func (s *Store) UpdateObject(ctx context.Context, ownerID string, o plot.Object) (plot.Object, error) {
-	err := s.pool.QueryRow(ctx, `UPDATE plot_objects o SET type=$1,name=$2,x=$3,y=$4,z=$5,width=$6,length=$7,height=$8,updated_at=now() FROM plots p WHERE o.plot_id=p.id AND p.owner_id=$9 AND o.id=$10 RETURNING o.updated_at`, o.Type, o.Name, o.X, o.Y, o.Z, o.Width, o.Length, o.Height, ownerID, o.ID).Scan(&o.UpdatedAt)
+	err := s.pool.QueryRow(ctx, `UPDATE plot_objects o SET type=$1,name=$2,x=$3,y=$4,z=$5,width=$6,length=$7,height=$8,geometry=$9,points=$10,properties=$11,updated_at=now() FROM plots p WHERE o.plot_id=p.id AND p.owner_id=$12 AND o.id=$13 RETURNING o.updated_at`, o.Type, o.Name, o.X, o.Y, o.Z, o.Width, o.Length, o.Height, o.Geometry, o.Points, o.Properties, ownerID, o.ID).Scan(&o.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return plot.Object{}, domainerr.New(domainerr.NotFound, "plot object not found")
 	}

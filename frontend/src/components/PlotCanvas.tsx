@@ -23,7 +23,7 @@ interface PlotCanvasProps {
 }
 
 const viewport = { width: 900, height: 620, padding: 58 };
-const colors: Record<PlotObject["type"], string> = {
+const colors: Partial<Record<PlotObject["type"], string>> = {
   building: "#64748b",
   garden_bed: "#a16207",
   tree: "#16a34a",
@@ -322,6 +322,7 @@ function CoordinateGuides({
   );
 }
 
+// eslint-disable-next-line max-lines-per-function
 function PlotObjects({
   objects,
   plotLength,
@@ -337,6 +338,53 @@ function PlotObjects({
   onSelect?: (id: string) => void;
   onPointerDown: (event: React.PointerEvent<SVGGElement>, object: PlotObject) => void;
 }) {
+  function renderObject(object: PlotObject, x: number, y: number, selected: boolean) {
+    const color = colors[object.type] ?? "#0f766e";
+    const objectPoints = object.points ?? [];
+    const points = objectPoints
+      .map(
+        (point) =>
+          `${toScreenX(point.x, scale, viewport.padding)},${toScreenY(point.y, 0, plotLength, scale, viewport.padding)}`,
+      )
+      .join(" ");
+    if (object.geometry === "polyline" && objectPoints.length > 1) {
+      return (
+        <polyline
+          points={points}
+          fill="none"
+          stroke={color}
+          strokeWidth={Math.max(4, object.width * scale)}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      );
+    }
+    if (object.geometry === "polygon" && objectPoints.length > 2) {
+      return (
+        <polygon
+          points={points}
+          fill={color}
+          fillOpacity="0.32"
+          stroke={selected ? "#0f172a" : color}
+          strokeWidth={selected ? 4 : 2}
+        />
+      );
+    }
+    return (
+      <rect
+        x={x}
+        y={y}
+        width={object.width * scale}
+        height={object.length * scale}
+        rx="3"
+        fill={color}
+        fillOpacity="0.75"
+        stroke={selected ? "#0f172a" : "white"}
+        strokeWidth={selected ? 4 : 2}
+      />
+    );
+  }
+
   return (
     <g>
       {objects.map((object) => {
@@ -352,17 +400,7 @@ function PlotObjects({
             role="button"
             aria-label={`${object.name}, x ${object.x}, y ${object.y}`}
           >
-            <rect
-              x={x}
-              y={y}
-              width={object.width * scale}
-              height={object.length * scale}
-              rx="3"
-              fill={colors[object.type]}
-              fillOpacity="0.75"
-              stroke={selected ? "#0f172a" : "white"}
-              strokeWidth={selected ? 4 : 2}
-            />
+            {renderObject(object, x, y, selected)}
             <text
               x={x + 6}
               y={y + 18}
