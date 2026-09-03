@@ -155,11 +155,17 @@ func (s *Store) Delete(ctx context.Context, ownerID, plotID string) error {
 	return deleted(command, "plot not found")
 }
 
-const objectColumns = `o.id,o.plot_id,o.type,o.name,o.x,o.y,o.z,o.width,o.length,o.height,o.geometry,o.points,o.properties,o.created_at,o.updated_at`
+const objectColumns = `o.id,o.plot_id,o.type,o.name,o.x,o.y,o.z,o.width,o.length,o.height,o.geometry,o.points,o.properties,o.created_at,o.updated_at,b.kind,b.roof_type,b.wall_material,COALESCE(fs.floor_count,0),COALESCE(fs.total_height,0)`
 
 func scanObject(row pgx.Row) (plot.Object, error) {
 	var o plot.Object
-	err := row.Scan(&o.ID, &o.PlotID, &o.Type, &o.Name, &o.X, &o.Y, &o.Z, &o.Width, &o.Length, &o.Height, &o.Geometry, &o.Points, &o.Properties, &o.CreatedAt, &o.UpdatedAt)
+	var kind, roofType, wallMaterial *string
+	var floorCount int
+	var totalHeight float64
+	err := row.Scan(&o.ID, &o.PlotID, &o.Type, &o.Name, &o.X, &o.Y, &o.Z, &o.Width, &o.Length, &o.Height, &o.Geometry, &o.Points, &o.Properties, &o.CreatedAt, &o.UpdatedAt, &kind, &roofType, &wallMaterial, &floorCount, &totalHeight)
+	if kind != nil {
+		o.Building = &plot.BuildingView{Kind: *kind, RoofType: *roofType, WallMaterial: *wallMaterial, FloorCount: floorCount, TotalHeight: totalHeight}
+	}
 	return o, err
 }
 func (s *Store) AddObject(ctx context.Context, ownerID string, o plot.Object) (plot.Object, error) {
@@ -173,7 +179,7 @@ func (s *Store) AddObject(ctx context.Context, ownerID string, o plot.Object) (p
 	return o, nil
 }
 func (s *Store) ListObjects(ctx context.Context, ownerID, plotID string) ([]plot.Object, error) {
-	rows, err := s.pool.Query(ctx, `SELECT `+objectColumns+` FROM plot_objects o JOIN plots p ON p.id=o.plot_id WHERE p.owner_id=$1 AND p.id=$2 ORDER BY o.created_at`, ownerID, plotID)
+	rows, err := s.pool.Query(ctx, `SELECT `+objectColumns+` FROM plot_objects o JOIN plots p ON p.id=o.plot_id LEFT JOIN buildings b ON b.plot_object_id=o.id LEFT JOIN LATERAL (SELECT count(*)::int floor_count,COALESCE(sum(height),0)::float8 total_height FROM building_floors WHERE building_id=o.id) fs ON true WHERE p.owner_id=$1 AND p.id=$2 ORDER BY o.created_at`, ownerID, plotID)
 	if err != nil {
 		return nil, internal("could not list plot objects", err)
 	}
@@ -181,15 +187,21 @@ func (s *Store) ListObjects(ctx context.Context, ownerID, plotID string) ([]plot
 	items := []plot.Object{}
 	for rows.Next() {
 		var o plot.Object
-		if err := rows.Scan(&o.ID, &o.PlotID, &o.Type, &o.Name, &o.X, &o.Y, &o.Z, &o.Width, &o.Length, &o.Height, &o.Geometry, &o.Points, &o.Properties, &o.CreatedAt, &o.UpdatedAt); err != nil {
+		var kind, roofType, wallMaterial *string
+		var floorCount int
+		var totalHeight float64
+		if err := rows.Scan(&o.ID, &o.PlotID, &o.Type, &o.Name, &o.X, &o.Y, &o.Z, &o.Width, &o.Length, &o.Height, &o.Geometry, &o.Points, &o.Properties, &o.CreatedAt, &o.UpdatedAt, &kind, &roofType, &wallMaterial, &floorCount, &totalHeight); err != nil {
 			return nil, internal("could not scan plot object", err)
+		}
+		if kind != nil {
+			o.Building = &plot.BuildingView{Kind: *kind, RoofType: *roofType, WallMaterial: *wallMaterial, FloorCount: floorCount, TotalHeight: totalHeight}
 		}
 		items = append(items, o)
 	}
 	return items, rows.Err()
 }
 func (s *Store) GetObject(ctx context.Context, ownerID, plotID, objectID string) (plot.Object, error) {
-	o, err := scanObject(s.pool.QueryRow(ctx, `SELECT `+objectColumns+` FROM plot_objects o JOIN plots p ON p.id=o.plot_id WHERE p.owner_id=$1 AND p.id=$2 AND o.id=$3`, ownerID, plotID, objectID))
+	o, err := scanObject(s.pool.QueryRow(ctx, `SELECT `+objectColumns+` FROM plot_objects o JOIN plots p ON p.id=o.plot_id LEFT JOIN buildings b ON b.plot_object_id=o.id LEFT JOIN LATERAL (SELECT count(*)::int floor_count,COALESCE(sum(height),0)::float8 total_height FROM building_floors WHERE building_id=o.id) fs ON true WHERE p.owner_id=$1 AND p.id=$2 AND o.id=$3`, ownerID, plotID, objectID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return plot.Object{}, domainerr.New(domainerr.NotFound, "plot object not found")
 	}

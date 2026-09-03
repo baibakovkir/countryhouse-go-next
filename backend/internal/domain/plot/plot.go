@@ -62,8 +62,17 @@ type Object struct {
 	Geometry   GeometryType    `json:"geometry"`
 	Points     []Point         `json:"points,omitempty"`
 	Properties json.RawMessage `json:"properties,omitempty"`
+	Building   *BuildingView   `json:"building,omitempty"`
 	CreatedAt  time.Time       `json:"createdAt"`
 	UpdatedAt  time.Time       `json:"updatedAt"`
+}
+
+type BuildingView struct {
+	Kind         string  `json:"kind"`
+	RoofType     string  `json:"roofType"`
+	WallMaterial string  `json:"wallMaterial"`
+	FloorCount   int     `json:"floorCount"`
+	TotalHeight  float64 `json:"totalHeight"`
 }
 
 type Repository interface {

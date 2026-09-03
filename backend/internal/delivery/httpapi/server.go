@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/example/countryhouse/backend/internal/application/authapp"
+	"github.com/example/countryhouse/backend/internal/application/buildingapp"
 	"github.com/example/countryhouse/backend/internal/application/expenseapp"
 	"github.com/example/countryhouse/backend/internal/application/plotapp"
 	"github.com/example/countryhouse/backend/internal/application/timelineapp"
@@ -32,6 +33,7 @@ type userContextKey struct{}
 
 type Server struct {
 	auth         *authapp.Service
+	buildings    *buildingapp.Service
 	plot         *plotapp.Service
 	expenses     *expenseapp.Service
 	timeline     *timelineapp.Service
@@ -41,8 +43,8 @@ type Server struct {
 	health       func() error
 }
 
-func New(authService *authapp.Service, plotService *plotapp.Service, expenseService *expenseapp.Service, timelineService *timelineapp.Service, logger *slog.Logger, origin string, secureCookie bool, health func() error) http.Handler {
-	s := &Server{auth: authService, plot: plotService, expenses: expenseService, timeline: timelineService, logger: logger, origin: strings.TrimRight(origin, "/"), secureCookie: secureCookie, health: health}
+func New(authService *authapp.Service, plotService *plotapp.Service, buildingService *buildingapp.Service, expenseService *expenseapp.Service, timelineService *timelineapp.Service, logger *slog.Logger, origin string, secureCookie bool, health func() error) http.Handler {
+	s := &Server{auth: authService, plot: plotService, buildings: buildingService, expenses: expenseService, timeline: timelineService, logger: logger, origin: strings.TrimRight(origin, "/"), secureCookie: secureCookie, health: health}
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.RealIP, middleware.Recoverer, s.cors)
 	r.Get("/healthz", s.healthz)
@@ -68,6 +70,16 @@ func New(authService *authapp.Service, plotService *plotapp.Service, expenseServ
 							r.Patch("/", s.updateObject)
 							r.Delete("/", s.deleteObject)
 						})
+					})
+					r.Route("/buildings/{objectId}", func(r chi.Router) {
+						r.Get("/", s.getBuilding)
+						r.Put("/", s.saveBuilding)
+						r.Post("/floors", s.addBuildingFloor)
+						r.Patch("/floors/{floorId}", s.updateBuildingFloor)
+						r.Delete("/floors/{floorId}", s.deleteBuildingFloor)
+						r.Post("/floors/{floorId}/elements", s.addFloorElement)
+						r.Patch("/floors/{floorId}/elements/{elementId}", s.updateFloorElement)
+						r.Delete("/floors/{floorId}/elements/{elementId}", s.deleteFloorElement)
 					})
 					r.Route("/expenses", func(r chi.Router) {
 						r.Get("/", s.listExpenses)
@@ -95,7 +107,7 @@ func (s *Server) cors(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Origin", s.origin)
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
 		w.Header().Add("Vary", "Origin")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

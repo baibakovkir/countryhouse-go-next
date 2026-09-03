@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { PlotPageHeader } from "@/components/PlotPageHeader";
 import { StatusMessage } from "@/components/StatusMessage";
@@ -106,6 +107,14 @@ export default function PlotPlanPage() {
             onCreateNew={clearSelection}
             onDelete={remove}
           />
+          {current?.type === "building" && (
+            <Link
+              className="ui-link-button w-full"
+              href={`/plots/${plotId}/buildings/${current.id}`}
+            >
+              Открыть план здания
+            </Link>
+          )}
         </div>
       </div>
     </div>

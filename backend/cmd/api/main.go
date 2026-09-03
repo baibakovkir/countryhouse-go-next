@@ -14,6 +14,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/example/countryhouse/backend/internal/application/authapp"
+	"github.com/example/countryhouse/backend/internal/application/buildingapp"
 	"github.com/example/countryhouse/backend/internal/application/expenseapp"
 	"github.com/example/countryhouse/backend/internal/application/plotapp"
 	"github.com/example/countryhouse/backend/internal/application/timelineapp"
@@ -67,6 +68,7 @@ func main() {
 	}
 	authService := authapp.New(store)
 	plotService := plotapp.New(store)
+	buildingService := buildingapp.New(store, store)
 	expenseService := expenseapp.New(postgres.ExpenseRepository{Store: store}, store)
 	timelineService := timelineapp.New(postgres.TimelineRepository{Store: store}, store)
 	origin := env("CORS_ALLOWED_ORIGIN", "http://localhost:3000")
@@ -75,7 +77,7 @@ func main() {
 		logger.Error("invalid COOKIE_SECURE", "error", err)
 		os.Exit(1)
 	}
-	handler := httpapi.New(authService, plotService, expenseService, timelineService, logger, origin, secureCookie, func() error { return pool.Ping(context.Background()) })
+	handler := httpapi.New(authService, plotService, buildingService, expenseService, timelineService, logger, origin, secureCookie, func() error { return pool.Ping(context.Background()) })
 
 	server := &http.Server{Addr: env("HTTP_ADDR", ":8080"), Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
 	go func() {

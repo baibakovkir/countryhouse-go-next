@@ -13,6 +13,12 @@ import type {
   UpdatePlotObject,
   UpdateTimelineTask,
   User,
+  BuildingConfig,
+  CreateBuildingFloor,
+  BuildingFloor,
+  FloorElement,
+  SaveBuildingConfig,
+  SaveFloorElement,
 } from "@/types/domain";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
@@ -51,7 +57,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
-const send = <T>(method: "POST" | "PATCH", path: string, body: unknown) =>
+const send = <T>(method: "POST" | "PUT" | "PATCH", path: string, body: unknown) =>
   request<T>(path, { method, body: JSON.stringify(body) });
 const remove = (path: string) => request<void>(path, { method: "DELETE" });
 const base = (plotId: string) => `/api/v1/plots/${plotId}`;
@@ -83,4 +89,39 @@ export const api = {
   updateTask: (plotId: string, id: string, input: UpdateTimelineTask) =>
     send<TimelineTask>("PATCH", `${base(plotId)}/timeline/tasks/${id}/`, input),
   deleteTask: (plotId: string, id: string) => remove(`${base(plotId)}/timeline/tasks/${id}/`),
+  getBuilding: (plotId: string, objectId: string) =>
+    request<BuildingConfig>(`${base(plotId)}/buildings/${objectId}/`),
+  saveBuilding: (plotId: string, objectId: string, input: SaveBuildingConfig) =>
+    send<BuildingConfig>("PUT", `${base(plotId)}/buildings/${objectId}/`, input),
+  addBuildingFloor: (plotId: string, objectId: string, input: CreateBuildingFloor) =>
+    send<BuildingFloor>("POST", `${base(plotId)}/buildings/${objectId}/floors`, input),
+  updateBuildingFloor: (
+    plotId: string,
+    objectId: string,
+    floorId: string,
+    input: CreateBuildingFloor,
+  ) =>
+    send<BuildingFloor>("PATCH", `${base(plotId)}/buildings/${objectId}/floors/${floorId}`, input),
+  deleteBuildingFloor: (plotId: string, objectId: string, floorId: string) =>
+    remove(`${base(plotId)}/buildings/${objectId}/floors/${floorId}`),
+  addFloorElement: (plotId: string, objectId: string, floorId: string, input: SaveFloorElement) =>
+    send<FloorElement>(
+      "POST",
+      `${base(plotId)}/buildings/${objectId}/floors/${floorId}/elements`,
+      input,
+    ),
+  updateFloorElement: (
+    plotId: string,
+    objectId: string,
+    floorId: string,
+    elementId: string,
+    input: SaveFloorElement,
+  ) =>
+    send<FloorElement>(
+      "PATCH",
+      `${base(plotId)}/buildings/${objectId}/floors/${floorId}/elements/${elementId}`,
+      input,
+    ),
+  deleteFloorElement: (plotId: string, objectId: string, floorId: string, elementId: string) =>
+    remove(`${base(plotId)}/buildings/${objectId}/floors/${floorId}/elements/${elementId}`),
 };

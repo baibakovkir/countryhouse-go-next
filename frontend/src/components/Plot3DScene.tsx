@@ -129,6 +129,12 @@ function SceneObject({
     onSelect(object.id);
   };
 
+  if (object.type === "building" && object.building) {
+    return (
+      <BuildingMesh object={object} position={position} selected={selected} onSelect={select} />
+    );
+  }
+
   if (object.type === "tree") {
     const radius = Math.max(0.25, Math.min(object.width, object.length) / 3);
     return (
@@ -158,6 +164,94 @@ function SceneObject({
         />
       </mesh>
       <ObjectLabel name={object.name} y={renderedHeight / 2 + 0.3} />
+    </group>
+  );
+}
+
+const wallColors = {
+  wood: "#a16207",
+  brick: "#b4533c",
+  block: "#d6d3d1",
+  siding: "#e2e8f0",
+  custom: "#64748b",
+} as const;
+
+function BuildingMesh({
+  object,
+  position,
+  selected,
+  onSelect,
+}: {
+  object: PlotObject;
+  position: [number, number, number];
+  selected: boolean;
+  onSelect(event: ThreeEvent<MouseEvent>): void;
+}) {
+  const config = object.building!;
+  const bodyHeight = Math.max(config.totalHeight, object.height, 2.4);
+  const roofHeight =
+    config.roofType === "flat" ? 0.18 : Math.min(2, Math.max(0.6, object.width / 4));
+  const adjustedPosition: [number, number, number] = [
+    position[0],
+    position[1] - Math.max(object.height, 1) / 2 + bodyHeight / 2,
+    position[2],
+  ];
+  const roofY = bodyHeight / 2 + roofHeight / 2;
+  return (
+    <group position={adjustedPosition} onClick={onSelect}>
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[object.width, bodyHeight, object.length]} />
+        <meshStandardMaterial color={selected ? "#10b981" : wallColors[config.wallMaterial]} />
+      </mesh>
+      {Array.from({ length: Math.max(1, config.floorCount) }, (_, index) => (
+        <mesh
+          key={index}
+          position={[
+            0,
+            -bodyHeight / 2 + (index + 0.55) * (bodyHeight / Math.max(1, config.floorCount)),
+            object.length / 2 + 0.012,
+          ]}
+        >
+          <planeGeometry
+            args={[
+              Math.min(1.4, object.width * 0.22),
+              Math.min(1.2, (bodyHeight / config.floorCount) * 0.45),
+            ]}
+          />
+          <meshStandardMaterial color="#bae6fd" emissive="#0c4a6e" emissiveIntensity={0.12} />
+        </mesh>
+      ))}
+      {config.kind === "garage" && (
+        <mesh position={[0, -bodyHeight * 0.14, object.length / 2 + 0.018]}>
+          <planeGeometry
+            args={[Math.min(object.width * 0.65, 3.4), Math.min(bodyHeight * 0.62, 2.5)]}
+          />
+          <meshStandardMaterial color="#475569" />
+        </mesh>
+      )}
+      {config.roofType === "flat" ? (
+        <mesh position={[0, roofY, 0]}>
+          <boxGeometry args={[object.width + 0.25, roofHeight, object.length + 0.25]} />
+          <meshStandardMaterial color="#334155" />
+        </mesh>
+      ) : (
+        <mesh position={[0, roofY, 0]} rotation={[0, 0, Math.PI / 4]}>
+          <boxGeometry
+            args={[roofHeight * Math.SQRT2, object.width * 0.76, object.length + 0.35]}
+          />
+          <meshStandardMaterial color={config.kind === "bathhouse" ? "#713f12" : "#334155"} />
+        </mesh>
+      )}
+      {config.kind === "bathhouse" && (
+        <mesh position={[object.width * 0.25, bodyHeight / 2 + roofHeight * 0.8, 0]}>
+          <cylinderGeometry args={[0.12, 0.16, 1, 12]} />
+          <meshStandardMaterial color="#44403c" />
+        </mesh>
+      )}
+      <ObjectLabel
+        name={`${object.name} · ${config.floorCount} эт.`}
+        y={bodyHeight / 2 + roofHeight + 0.35}
+      />
     </group>
   );
 }

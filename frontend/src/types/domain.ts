@@ -6,6 +6,55 @@ export interface PlotPoint {
   y: number;
   z: number;
 }
+export type BuildingKind = "house" | "garage" | "bathhouse" | "outbuilding" | "custom";
+export type RoofType = "gable" | "hip" | "flat" | "shed";
+export type WallMaterial = "wood" | "brick" | "block" | "siding" | "custom";
+export type FloorElementCategory =
+  "room" | "wall" | "opening" | "furniture" | "equipment" | "utility" | "custom";
+export interface FloorElement {
+  id: string;
+  floorId: string;
+  catalogKey: string;
+  category: FloorElementCategory;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  length: number;
+  height: number;
+  rotation: number;
+  geometry: PlotObjectGeometry;
+  points: PlotPoint[];
+  properties: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface BuildingFloor {
+  id: string;
+  buildingId: string;
+  level: number;
+  name: string;
+  height: number;
+  elements: FloorElement[];
+  createdAt: string;
+  updatedAt: string;
+}
+export interface BuildingConfig {
+  plotObjectId: string;
+  kind: BuildingKind;
+  roofType: RoofType;
+  wallMaterial: WallMaterial;
+  properties: Record<string, unknown>;
+  floors: BuildingFloor[];
+  createdAt: string;
+  updatedAt: string;
+}
+export type SaveBuildingConfig = Pick<
+  BuildingConfig,
+  "kind" | "roofType" | "wallMaterial" | "properties"
+>;
+export type CreateBuildingFloor = Pick<BuildingFloor, "level" | "name" | "height">;
+export type SaveFloorElement = Omit<FloorElement, "id" | "floorId" | "createdAt" | "updatedAt">;
 
 export interface User {
   id: string;
@@ -25,6 +74,13 @@ export interface PlotObject {
   geometry: PlotObjectGeometry;
   points: PlotPoint[];
   properties: Record<string, unknown>;
+  building?: {
+    kind: BuildingKind;
+    roofType: RoofType;
+    wallMaterial: WallMaterial;
+    floorCount: number;
+    totalHeight: number;
+  };
   createdAt: string;
   updatedAt: string;
 }
